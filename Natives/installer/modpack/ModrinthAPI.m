@@ -30,7 +30,7 @@
         @"facets": facetString,
         @"query": searchFilters[@"name"] ?: @"",
         @"limit": @(limit),
-        @"index": @"relevance",
+        @"index": searchFilters[@"index"] ?: @"relevance",
         @"offset": @(modrinthSearchResult.count)
     };
     NSDictionary *response = [self getEndpoint:@"search" params:params];
@@ -47,7 +47,11 @@
             @"id": hit[@"project_id"] ?: @"",
             @"title": hit[@"title"] ?: @"Untitled project",
             @"description": hit[@"description"] ?: @"",
-            @"imageUrl": hit[@"icon_url"] ?: @""
+            @"imageUrl": hit[@"icon_url"] ?: @"",
+            @"author": hit[@"author"] ?: @"Modrinth creator",
+            @"downloads": hit[@"downloads"] ?: @0,
+            @"dateModified": hit[@"date_modified"] ?: @"",
+            @"categories": hit[@"display_categories"] ?: hit[@"categories"] ?: @[]
         }.mutableCopy];
     }
     self.reachedLastPage = result.count >= [response[@"total_hits"] unsignedLongValue];
