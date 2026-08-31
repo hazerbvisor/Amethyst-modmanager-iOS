@@ -24,23 +24,82 @@ static NSURL *AmethystArtworkURL(id value) {
     return url;
 }
 
+static NSString *AmethystContentSingular(AmethystContentType type) {
+    switch (type) {
+        case AmethystContentTypeResourcePack: return @"resource pack";
+        case AmethystContentTypeShaderPack: return @"shader pack";
+        default: return @"mod";
+    }
+}
+
+static NSString *AmethystContentPlural(AmethystContentType type) {
+    switch (type) {
+        case AmethystContentTypeResourcePack: return @"Resource Packs";
+        case AmethystContentTypeShaderPack: return @"Shaders";
+        default: return @"Mods";
+    }
+}
+
+static NSString *AmethystContentProjectType(AmethystContentType type) {
+    switch (type) {
+        case AmethystContentTypeResourcePack: return @"resourcepack";
+        case AmethystContentTypeShaderPack: return @"shader";
+        default: return @"mod";
+    }
+}
+
+static NSString *AmethystContentDirectoryName(AmethystContentType type) {
+    switch (type) {
+        case AmethystContentTypeResourcePack: return @"resourcepacks";
+        case AmethystContentTypeShaderPack: return @"shaderpacks";
+        default: return @"mods";
+    }
+}
+
+static NSString *AmethystContentExtension(AmethystContentType type) {
+    return type == AmethystContentTypeMod ? @"jar" : @"zip";
+}
+
+static NSString *AmethystContentSymbol(AmethystContentType type) {
+    switch (type) {
+        case AmethystContentTypeResourcePack: return @"photo.stack";
+        case AmethystContentTypeShaderPack: return @"sparkles";
+        default: return @"shippingbox";
+    }
+}
+
+static NSString *AmethystReadableFilterName(NSString *value) {
+    if (![value isKindOfClass:NSString.class]) return @"Other";
+    NSString *readable = [value stringByReplacingOccurrencesOfString:@"_" withString:@" "];
+    readable = [readable stringByReplacingOccurrencesOfString:@"-" withString:@" "];
+    return readable.capitalizedString;
+}
+
 @interface ModrinthModBrowserViewController : UITableViewController<UISearchResultsUpdating>
-- (instancetype)initWithProfile:(NSDictionary *)profile modsDirectory:(NSString *)modsDirectory;
+- (instancetype)initWithProfile:(NSDictionary *)profile
+    contentDirectory:(NSString *)contentDirectory
+    contentType:(AmethystContentType)contentType;
 @end
 
 @interface ModManagerViewController ()<UIDocumentPickerDelegate>
 @property(nonatomic) NSMutableDictionary *profile;
 @property(nonatomic) NSString *modsDirectory;
 @property(nonatomic) NSMutableArray<NSString *> *mods;
+@property(nonatomic) AmethystContentType contentType;
 @end
 
 @implementation ModManagerViewController
 
 - (instancetype)initWithProfile:(NSMutableDictionary *)profile {
+    return [self initWithProfile:profile contentType:AmethystContentTypeMod];
+}
+
+- (instancetype)initWithProfile:(NSMutableDictionary *)profile contentType:(AmethystContentType)contentType {
     self = [super initWithStyle:UITableViewStyleInsetGrouped];
     if (self) {
         self.profile = profile;
-        self.title = @"Manage Mods";
+        self.contentType = contentType;
+        self.title = [NSString stringWithFormat:@"Manage %@", AmethystContentPlural(contentType)];
 
         NSString *relativeGameDirectory = profile[@"gameDir"];
         if (relativeGameDirectory.length == 0) relativeGameDirectory = @".";
@@ -48,7 +107,8 @@ static NSURL *AmethystArtworkURL(id value) {
             getenv("POJAV_HOME"), getPrefObject(@"general.game_directory")];
         NSString *gameDirectory = [[instanceRoot stringByAppendingPathComponent:relativeGameDirectory]
             stringByStandardizingPath];
-        self.modsDirectory = [gameDirectory stringByAppendingPathComponent:@"mods"];
+        self.modsDirectory = [gameDirectory stringByAppendingPathComponent:
+            AmethystContentDirectoryName(contentType)];
     }
     return self;
 }
@@ -57,17 +117,21 @@ static NSURL *AmethystArtworkURL(id value) {
     [super viewDidLoad];
     self.tableView.allowsSelection = NO;
 
-    UIAction *browse = [UIAction actionWithTitle:@"Browse Modrinth"
+    NSString *singular = AmethystContentSingular(self.contentType);
+    NSString *extension = AmethystContentExtension(self.contentType).uppercaseString;
+    UIAction *browse = [UIAction actionWithTitle:[NSString stringWithFormat:@"Browse %@ on Modrinth",
+        AmethystContentPlural(self.contentType)]
         image:[UIImage systemImageNamed:@"magnifyingglass"] identifier:nil handler:^(__kindof UIAction *action) {
         ModrinthModBrowserViewController *browser = [[ModrinthModBrowserViewController alloc]
-            initWithProfile:self.profile modsDirectory:self.modsDirectory];
+            initWithProfile:self.profile contentDirectory:self.modsDirectory contentType:self.contentType];
         [self.navigationController pushViewController:browser animated:YES];
     }];
-    UIAction *importJar = [UIAction actionWithTitle:@"Import JAR from Files"
+    UIAction *importFile = [UIAction actionWithTitle:[NSString stringWithFormat:@"Import %@ from Files", extension]
         image:[UIImage systemImageNamed:@"square.and.arrow.down"] identifier:nil handler:^(__kindof UIAction *action) {
         [self actionImportJar];
     }];
-    UIMenu *menu = [UIMenu menuWithTitle:@"Add Mod" children:@[browse, importJar]];
+    UIMenu *menu = [UIMenu menuWithTitle:[NSString stringWithFormat:@"Add %@", singular.capitalizedString]
+        children:@[browse, importFile]];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
         initWithBarButtonSystemItem:UIBarButtonSystemItemAdd menu:menu];
 }
@@ -82,16 +146,20 @@ static NSURL *AmethystArtworkURL(id value) {
     [NSFileManager.defaultManager createDirectoryAtPath:self.modsDirectory
         withIntermediateDirectories:YES attributes:nil error:&error];
     if (error) {
-        showDialog(@"Unable to open mods folder", error.localizedDescription);
+        showDialog([NSString stringWithFormat:@"Unable to open %@ folder",
+            AmethystContentSingular(self.contentType)], error.localizedDescription);
         self.mods = [NSMutableArray new];
         return;
     }
 
     NSArray<NSString *> *contents = [NSFileManager.defaultManager
         contentsOfDirectoryAtPath:self.modsDirectory error:&error];
+    NSString *extension = [@"." stringByAppendingString:AmethystContentExtension(self.contentType)];
+    BOOL supportsDisabledFiles = self.contentType == AmethystContentTypeMod;
     NSPredicate *jarPredicate = [NSPredicate predicateWithBlock:^BOOL(NSString *name, NSDictionary *bindings) {
         NSString *lowercaseName = name.lowercaseString;
-        return [lowercaseName hasSuffix:@".jar"] || [lowercaseName hasSuffix:@".jar.disabled"];
+        return [lowercaseName hasSuffix:extension] ||
+            (supportsDisabledFiles && [lowercaseName hasSuffix:[extension stringByAppendingString:AmethystDisabledModSuffix]]);
     }];
     self.mods = [[contents filteredArrayUsingPredicate:jarPredicate] mutableCopy] ?: [NSMutableArray new];
     [self.mods sortUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
@@ -99,7 +167,8 @@ static NSURL *AmethystArtworkURL(id value) {
 }
 
 - (void)actionImportJar {
-    UTType *jarType = [UTType typeWithMIMEType:@"application/java-archive"];
+    UTType *jarType = self.contentType == AmethystContentTypeMod
+        ? [UTType typeWithMIMEType:@"application/java-archive"] : UTTypeZIP;
     UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
         initForOpeningContentTypes:@[jarType] asCopy:YES];
     picker.delegate = self;
@@ -112,8 +181,9 @@ static NSURL *AmethystArtworkURL(id value) {
     didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
     BOOL importedAnyJar = NO;
     NSError *firstError = nil;
+    NSString *expectedExtension = AmethystContentExtension(self.contentType);
     for (NSURL *url in urls) {
-        if (![url.pathExtension.lowercaseString isEqualToString:@"jar"]) continue;
+        if (![url.pathExtension.lowercaseString isEqualToString:expectedExtension]) continue;
         BOOL accessed = [url startAccessingSecurityScopedResource];
         NSString *destination = [self.modsDirectory stringByAppendingPathComponent:url.lastPathComponent];
         NSString *stagedPath = [self.modsDirectory stringByAppendingPathComponent:
@@ -128,7 +198,7 @@ static NSURL *AmethystArtworkURL(id value) {
         } else if (!error) {
             [NSFileManager.defaultManager moveItemAtPath:stagedPath toPath:destination error:&error];
         }
-        if (!error) {
+        if (!error && self.contentType == AmethystContentTypeMod) {
             [NSFileManager.defaultManager removeItemAtPath:
                 [destination stringByAppendingString:AmethystDisabledModSuffix] error:nil];
         }
@@ -144,8 +214,11 @@ static NSURL *AmethystArtworkURL(id value) {
     if (firstError) {
         showDialog(@"Import failed", firstError.localizedDescription);
     } else if (importedAnyJar) {
+        NSString *singular = AmethystContentSingular(self.contentType);
         UIAlertController *warning = [UIAlertController alertControllerWithTitle:@"Check compatibility"
-            message:@"Imported JARs cannot be verified automatically. Make sure each mod matches this profile's Minecraft version and mod loader."
+            message:[NSString stringWithFormat:@"Imported %@ files cannot be verified automatically. Make sure each %@ supports this profile's Minecraft version.%@",
+                expectedExtension.uppercaseString, singular,
+                self.contentType == AmethystContentTypeMod ? @" Also check its mod loader." : @""]
             preferredStyle:UIAlertControllerStyleAlert];
         [warning addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:warning animated:YES completion:nil];
@@ -159,38 +232,50 @@ static NSURL *AmethystArtworkURL(id value) {
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    return @"Modrinth installs are filtered for this profile. Imported JARs are not compatibility checked. Disabled mods remain in the profile but are not loaded by Minecraft.";
+    if (self.contentType == AmethystContentTypeMod) {
+        return @"Modrinth installs are filtered for this profile. Imported JARs are not compatibility checked. Disabled mods remain in the profile but are not loaded by Minecraft.";
+    }
+    return [NSString stringWithFormat:@"Modrinth installs are filtered for this profile. Imported ZIPs are not compatibility checked. Enable installed %@ from Minecraft's %@ settings.",
+        AmethystContentPlural(self.contentType).lowercaseString,
+        self.contentType == AmethystContentTypeResourcePack ? @"Resource Packs" : @"Shader Packs"];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModCell"];
     if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"ModCell"];
     cell.accessoryView = nil;
-    cell.imageView.image = [UIImage systemImageNamed:@"shippingbox"];
+    cell.imageView.image = [UIImage systemImageNamed:AmethystContentSymbol(self.contentType)];
 
     if (self.mods.count == 0) {
-        cell.textLabel.text = @"No mods installed";
-        cell.detailTextLabel.text = @"Tap + to browse Modrinth or import a JAR.";
+        cell.textLabel.text = [NSString stringWithFormat:@"No %@ installed",
+            AmethystContentPlural(self.contentType).lowercaseString];
+        cell.detailTextLabel.text = [NSString stringWithFormat:@"Tap + to browse Modrinth or import a %@.",
+            AmethystContentExtension(self.contentType).uppercaseString];
         cell.textLabel.enabled = cell.detailTextLabel.enabled = NO;
         return cell;
     }
 
     NSString *filename = self.mods[indexPath.row];
-    BOOL enabled = ![filename.lowercaseString hasSuffix:AmethystDisabledModSuffix];
+    BOOL canToggle = self.contentType == AmethystContentTypeMod;
+    BOOL enabled = !canToggle || ![filename.lowercaseString hasSuffix:AmethystDisabledModSuffix];
     NSString *displayName = enabled ? filename : [filename substringToIndex:filename.length - AmethystDisabledModSuffix.length];
     cell.textLabel.text = displayName;
-    cell.detailTextLabel.text = enabled ? @"Enabled" : @"Disabled";
+    cell.detailTextLabel.text = canToggle ? (enabled ? @"Enabled" : @"Disabled")
+        : @"Installed • Enable from Minecraft settings";
     cell.textLabel.enabled = cell.detailTextLabel.enabled = YES;
 
-    UISwitch *toggle = [UISwitch new];
-    toggle.on = enabled;
-    toggle.tag = indexPath.row;
-    [toggle addTarget:self action:@selector(toggleMod:) forControlEvents:UIControlEventValueChanged];
-    cell.accessoryView = toggle;
+    if (canToggle) {
+        UISwitch *toggle = [UISwitch new];
+        toggle.on = enabled;
+        toggle.tag = indexPath.row;
+        [toggle addTarget:self action:@selector(toggleMod:) forControlEvents:UIControlEventValueChanged];
+        cell.accessoryView = toggle;
+    }
     return cell;
 }
 
 - (void)toggleMod:(UISwitch *)sender {
+    if (self.contentType != AmethystContentTypeMod) return;
     if (sender.tag >= self.mods.count) return;
     NSString *filename = self.mods[sender.tag];
     NSString *newFilename = sender.isOn
@@ -204,13 +289,35 @@ static NSURL *AmethystArtworkURL(id value) {
     [self reloadMods];
 }
 
+- (void)removeRegistryEntriesForFilename:(NSString *)filename {
+    NSString *registryPath = [self.modsDirectory stringByAppendingPathComponent:@".amethyst-modrinth.json"];
+    NSData *data = [NSData dataWithContentsOfFile:registryPath];
+    NSMutableDictionary *registry = data
+        ? [[NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:nil] mutableCopy]
+        : nil;
+    if (![registry isKindOfClass:NSMutableDictionary.class]) return;
+    NSMutableArray<NSString *> *keysToRemove = [NSMutableArray new];
+    [registry enumerateKeysAndObjectsUsingBlock:^(NSString *projectId, NSString *storedFilename, BOOL *stop) {
+        if ([storedFilename.lastPathComponent isEqualToString:filename.lastPathComponent] ||
+            [storedFilename.lastPathComponent isEqualToString:
+                [filename stringByReplacingOccurrencesOfString:AmethystDisabledModSuffix withString:@""]]) {
+            [keysToRemove addObject:projectId];
+        }
+    }];
+    [registry removeObjectsForKeys:keysToRemove];
+    NSData *updated = [NSJSONSerialization dataWithJSONObject:registry
+        options:NSJSONWritingPrettyPrinted error:nil];
+    [updated writeToFile:registryPath options:NSDataWritingAtomic error:nil];
+}
+
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView
     trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (self.mods.count == 0) return nil;
     UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive
         title:@"Delete" handler:^(UIContextualAction *action, UIView *sourceView, void (^completionHandler)(BOOL)) {
         NSString *filename = self.mods[indexPath.row];
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Delete mod?"
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:
+            [NSString stringWithFormat:@"Delete %@?", AmethystContentSingular(self.contentType)]
             message:filename preferredStyle:UIAlertControllerStyleActionSheet];
         alert.popoverPresentationController.sourceView = sourceView;
         alert.popoverPresentationController.sourceRect = sourceView.bounds;
@@ -222,6 +329,7 @@ static NSURL *AmethystArtworkURL(id value) {
             [NSFileManager.defaultManager removeItemAtPath:
                 [self.modsDirectory stringByAppendingPathComponent:filename] error:&error];
             if (error) showDialog(@"Delete failed", error.localizedDescription);
+            else [self removeRegistryEntriesForFilename:filename];
             [self reloadMods];
             completionHandler(error == nil);
         }]];
@@ -412,6 +520,7 @@ static NSURL *AmethystArtworkURL(id value) {
 @interface ModrinthModBrowserViewController ()<ModrinthModDetailViewControllerDelegate>
 @property(nonatomic) NSDictionary *profile;
 @property(nonatomic) NSString *modsDirectory;
+@property(nonatomic) AmethystContentType contentType;
 @property(nonatomic) NSString *minecraftVersion;
 @property(nonatomic) NSString *loader;
 @property(nonatomic) UISearchController *searchController;
@@ -421,19 +530,37 @@ static NSURL *AmethystArtworkURL(id value) {
 @property(nonatomic) NSInteger selectedSort;
 @property(nonatomic) UISegmentedControl *sortControl;
 @property(nonatomic) NSMutableSet<NSString *> *installedProjectIds;
+@property(nonatomic) NSArray<NSDictionary *> *availableCategories;
+@property(nonatomic) NSString *selectedCategory;
+@property(nonatomic) NSString *selectedEnvironment;
+@property(nonatomic) UIBarButtonItem *filterButton;
 @end
 
 @implementation ModrinthModBrowserViewController
 
-- (instancetype)initWithProfile:(NSDictionary *)profile modsDirectory:(NSString *)modsDirectory {
+- (instancetype)initWithProfile:(NSDictionary *)profile
+    contentDirectory:(NSString *)contentDirectory
+    contentType:(AmethystContentType)contentType {
     self = [super initWithStyle:UITableViewStyleInsetGrouped];
     if (self) {
         self.profile = profile;
-        self.modsDirectory = modsDirectory;
-        self.title = @"Mods";
+        self.modsDirectory = contentDirectory;
+        self.contentType = contentType;
+        self.title = AmethystContentPlural(contentType);
         [self resolveCompatibility];
     }
     return self;
+}
+
+- (BOOL)hasResolvedCompatibility {
+    return self.minecraftVersion.length > 0 &&
+        (self.contentType != AmethystContentTypeMod || self.loader.length > 0);
+}
+
+- (NSString *)versionLoaderFilter {
+    if (self.contentType == AmethystContentTypeMod) return self.loader ?: @"";
+    if (self.contentType == AmethystContentTypeResourcePack) return @"minecraft";
+    return @"";
 }
 
 - (void)resolveCompatibility {
@@ -473,14 +600,23 @@ static NSURL *AmethystArtworkURL(id value) {
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
     self.searchController.searchResultsUpdater = self;
     self.searchController.obscuresBackgroundDuringPresentation = NO;
-    self.searchController.searchBar.placeholder = @"Search mods";
+    self.searchController.searchBar.placeholder = [NSString stringWithFormat:@"Search %@",
+        AmethystContentPlural(self.contentType).lowercaseString];
     self.searchController.searchBar.autocapitalizationType = UITextAutocapitalizationTypeNone;
     self.navigationItem.searchController = self.searchController;
     self.definesPresentationContext = YES;
+    self.filterButton = [[UIBarButtonItem alloc]
+        initWithImage:[UIImage systemImageNamed:@"line.3.horizontal.decrease.circle"]
+        style:UIBarButtonItemStylePlain target:nil action:nil];
+    self.filterButton.accessibilityLabel = @"Filters";
+    self.navigationItem.rightBarButtonItem = self.filterButton;
+    [self installFallbackCategories];
+    [self rebuildFilterMenu];
     [self buildStoreHeader];
     [self reloadInstalledProjects];
+    [self loadAvailableCategories];
 
-    if (self.minecraftVersion.length == 0 || self.loader.length == 0) {
+    if (![self hasResolvedCompatibility]) {
         self.searchController.searchBar.userInteractionEnabled = NO;
         self.results = nil;
         [self.tableView reloadData];
@@ -507,7 +643,7 @@ static NSURL *AmethystArtworkURL(id value) {
 
     UILabel *title = [UILabel new];
     title.translatesAutoresizingMaskIntoConstraints = NO;
-    title.text = @"Discover Mods";
+    title.text = [NSString stringWithFormat:@"Discover %@", AmethystContentPlural(self.contentType)];
     title.font = [UIFont systemFontOfSize:34.0 weight:UIFontWeightBold];
     title.adjustsFontSizeToFitWidth = YES;
     title.minimumScaleFactor = 0.8;
@@ -515,8 +651,10 @@ static NSURL *AmethystArtworkURL(id value) {
 
     UILabel *compatibility = [UILabel new];
     compatibility.translatesAutoresizingMaskIntoConstraints = NO;
-    compatibility.text = [NSString stringWithFormat:@"✓  Minecraft %@  •  %@",
-        self.minecraftVersion ?: @"Unknown version", self.loader.capitalizedString ?: @"Unknown loader"];
+    compatibility.text = self.contentType == AmethystContentTypeMod
+        ? [NSString stringWithFormat:@"✓  Minecraft %@  •  %@",
+            self.minecraftVersion ?: @"Unknown version", self.loader.capitalizedString ?: @"Unknown loader"]
+        : [NSString stringWithFormat:@"✓  Minecraft %@", self.minecraftVersion ?: @"Unknown version"];
     compatibility.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
     compatibility.textColor = UIColor.secondaryLabelColor;
     [header addSubview:compatibility];
@@ -524,7 +662,7 @@ static NSURL *AmethystArtworkURL(id value) {
     self.sortControl = [[UISegmentedControl alloc] initWithItems:@[@"Featured", @"Popular", @"Updated"]];
     self.sortControl.translatesAutoresizingMaskIntoConstraints = NO;
     self.sortControl.selectedSegmentIndex = self.selectedSort;
-    self.sortControl.enabled = self.minecraftVersion.length > 0 && self.loader.length > 0;
+    self.sortControl.enabled = [self hasResolvedCompatibility];
     [self.sortControl addTarget:self action:@selector(sortChanged:) forControlEvents:UIControlEventValueChanged];
     [header addSubview:self.sortControl];
 
@@ -544,6 +682,128 @@ static NSURL *AmethystArtworkURL(id value) {
         [self.sortControl.heightAnchor constraintEqualToConstant:34.0]
     ]];
     self.tableView.tableHeaderView = header;
+}
+
+- (void)installFallbackCategories {
+    NSArray<NSString *> *names;
+    if (self.contentType == AmethystContentTypeResourcePack) {
+        names = @[@"8x-or-lower", @"16x", @"32x", @"64x", @"128x", @"audio",
+            @"fonts", @"gui", @"models", @"realistic", @"themed", @"vanilla-like"];
+    } else if (self.contentType == AmethystContentTypeShaderPack) {
+        names = @[@"fantasy", @"realistic", @"semi-realistic", @"vanilla-like",
+            @"potato", @"low", @"medium", @"high", @"screenshot"];
+    } else {
+        names = @[@"adventure", @"decoration", @"equipment", @"game-mechanics", @"library",
+            @"magic", @"management", @"mobs", @"optimization", @"storage", @"technology",
+            @"transportation", @"utility", @"worldgen"];
+    }
+    NSMutableArray *categories = [NSMutableArray new];
+    for (NSString *name in names) {
+        [categories addObject:@{@"name": name, @"header": @"Categories"}];
+    }
+    self.availableCategories = categories;
+}
+
+- (void)loadAvailableCategories {
+    NSString *projectType = AmethystContentProjectType(self.contentType);
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        NSArray *response = [self.api getEndpoint:@"tag/category" params:nil];
+        NSMutableArray<NSDictionary *> *categories = [NSMutableArray new];
+        for (id value in response) {
+            if (![value isKindOfClass:NSDictionary.class]) continue;
+            NSDictionary *category = value;
+            if (![category[@"project_type"] isEqualToString:projectType] ||
+                ![category[@"name"] isKindOfClass:NSString.class]) continue;
+            [categories addObject:category];
+        }
+        [categories sortUsingComparator:^NSComparisonResult(NSDictionary *left, NSDictionary *right) {
+            NSString *leftHeader = [left[@"header"] isKindOfClass:NSString.class] ? left[@"header"] : @"";
+            NSString *rightHeader = [right[@"header"] isKindOfClass:NSString.class] ? right[@"header"] : @"";
+            NSComparisonResult headerResult = [leftHeader localizedCaseInsensitiveCompare:rightHeader];
+            if (headerResult != NSOrderedSame) return headerResult;
+            return [left[@"name"] localizedCaseInsensitiveCompare:right[@"name"]];
+        }];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (categories.count > 0) self.availableCategories = categories;
+            [self rebuildFilterMenu];
+        });
+    });
+}
+
+- (void)selectCategory:(NSString *)category {
+    self.selectedCategory = category.length > 0 ? category : nil;
+    [self rebuildFilterMenu];
+    [self performSearchAppending:NO];
+}
+
+- (void)selectEnvironment:(NSString *)environment {
+    self.selectedEnvironment = environment.length > 0 ? environment : nil;
+    [self rebuildFilterMenu];
+    [self performSearchAppending:NO];
+}
+
+- (void)clearFilters {
+    self.selectedCategory = nil;
+    self.selectedEnvironment = nil;
+    [self rebuildFilterMenu];
+    [self performSearchAppending:NO];
+}
+
+- (void)rebuildFilterMenu {
+    __weak typeof(self) weakSelf = self;
+    NSMutableArray<UIMenuElement *> *categoryActions = [NSMutableArray new];
+    UIAction *allCategories = [UIAction actionWithTitle:@"All Categories"
+        image:nil identifier:nil handler:^(UIAction *action) { [weakSelf selectCategory:nil]; }];
+    allCategories.state = self.selectedCategory.length == 0 ? UIMenuElementStateOn : UIMenuElementStateOff;
+    [categoryActions addObject:allCategories];
+
+    for (NSDictionary *category in self.availableCategories) {
+        NSString *name = category[@"name"];
+        NSString *header = [category[@"header"] isKindOfClass:NSString.class] ? category[@"header"] : nil;
+        NSString *title = AmethystReadableFilterName(name);
+        if (header.length > 0 && ![header isEqualToString:@"categories"]) {
+            title = [NSString stringWithFormat:@"%@ · %@", AmethystReadableFilterName(header), title];
+        }
+        UIAction *action = [UIAction actionWithTitle:title image:nil identifier:nil
+            handler:^(UIAction *action) { [weakSelf selectCategory:name]; }];
+        action.state = [self.selectedCategory isEqualToString:name]
+            ? UIMenuElementStateOn : UIMenuElementStateOff;
+        [categoryActions addObject:action];
+    }
+    UIMenu *categories = [UIMenu menuWithTitle:@"Category" image:nil identifier:nil
+        options:0 children:categoryActions];
+
+    NSMutableArray<UIMenuElement *> *children = [NSMutableArray arrayWithObject:categories];
+    if (self.contentType == AmethystContentTypeMod) {
+        NSArray<NSDictionary *> *environmentOptions = @[
+            @{@"title": @"All Client-Compatible", @"value": @""},
+            @{@"title": @"Client Only", @"value": @"client_only"},
+            @{@"title": @"Client & Server", @"value": @"client_and_server"}
+        ];
+        NSMutableArray<UIAction *> *environmentActions = [NSMutableArray new];
+        for (NSDictionary *option in environmentOptions) {
+            NSString *value = option[@"value"];
+            UIAction *action = [UIAction actionWithTitle:option[@"title"] image:nil identifier:nil
+                handler:^(UIAction *action) { [weakSelf selectEnvironment:value]; }];
+            action.state = ((self.selectedEnvironment.length == 0 && value.length == 0) ||
+                [self.selectedEnvironment isEqualToString:value]) ? UIMenuElementStateOn : UIMenuElementStateOff;
+            [environmentActions addObject:action];
+        }
+        [children addObject:[UIMenu menuWithTitle:@"Environment" image:nil identifier:nil
+            options:0 children:environmentActions]];
+    }
+
+    BOOL hasFilters = self.selectedCategory.length > 0 || self.selectedEnvironment.length > 0;
+    if (hasFilters) {
+        UIAction *clear = [UIAction actionWithTitle:@"Clear Filters"
+            image:[UIImage systemImageNamed:@"xmark.circle"] identifier:nil
+            handler:^(UIAction *action) { [weakSelf clearFilters]; }];
+        [children addObject:clear];
+    }
+    self.filterButton.image = [UIImage systemImageNamed:hasFilters
+        ? @"line.3.horizontal.decrease.circle.fill" : @"line.3.horizontal.decrease.circle"];
+    self.filterButton.accessibilityValue = hasFilters ? @"Active" : @"None";
+    self.filterButton.menu = [UIMenu menuWithTitle:@"Filter Results" children:children];
 }
 
 - (void)reloadInstalledProjects {
@@ -575,20 +835,26 @@ static NSURL *AmethystArtworkURL(id value) {
 - (void)runDelayedSearch { [self performSearchAppending:NO]; }
 
 - (void)performSearchAppending:(BOOL)append {
-    if (self.loading) return;
+    if (self.loading || ![self hasResolvedCompatibility]) return;
     self.loading = YES;
     NSString *query = self.searchController.searchBar.text ?: @"";
     NSString *sortIndex = self.selectedSortIndex;
+    NSString *category = self.selectedCategory ?: @"";
+    NSString *environment = self.selectedEnvironment ?: @"";
     UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc]
         initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     [spinner startAnimating];
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:spinner];
+    UIBarButtonItem *spinnerItem = [[UIBarButtonItem alloc] initWithCustomView:spinner];
+    self.navigationItem.rightBarButtonItems = @[self.filterButton, spinnerItem];
 
     NSDictionary *filters = @{
         @"isModpack": @NO,
+        @"projectType": AmethystContentProjectType(self.contentType),
         @"name": query,
         @"mcVersion": self.minecraftVersion,
-        @"loader": self.loader,
+        @"loader": self.contentType == AmethystContentTypeMod ? (self.loader ?: @"") : @"",
+        @"category": category,
+        @"environment": environment,
         @"index": sortIndex
     };
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -596,9 +862,12 @@ static NSURL *AmethystArtworkURL(id value) {
             previousPageResult:append ? [self.results mutableCopy] : nil];
         dispatch_async(dispatch_get_main_queue(), ^{
             self.loading = NO;
-            self.navigationItem.rightBarButtonItem = nil;
+            self.navigationItem.rightBarButtonItems = @[self.filterButton];
             NSString *currentQuery = self.searchController.searchBar.text ?: @"";
-            if (![query isEqualToString:currentQuery] || ![sortIndex isEqualToString:self.selectedSortIndex]) {
+            if (![query isEqualToString:currentQuery] ||
+                ![sortIndex isEqualToString:self.selectedSortIndex] ||
+                ![category isEqualToString:self.selectedCategory ?: @""] ||
+                ![environment isEqualToString:self.selectedEnvironment ?: @""]) {
                 [self performSearchAppending:NO];
                 return;
             }
@@ -611,6 +880,7 @@ static NSURL *AmethystArtworkURL(id value) {
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     if (self.searchController.searchBar.text.length > 0) return @"Search Results";
+    if (self.selectedCategory.length > 0 || self.selectedEnvironment.length > 0) return @"Filtered Results";
     return @[@"Featured for You", @"Most Downloaded", @"Recently Updated"][self.selectedSort];
 }
 
@@ -624,11 +894,15 @@ static NSURL *AmethystArtworkURL(id value) {
         if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"EmptyResult"];
         cell.backgroundColor = UIColor.clearColor;
         cell.imageView.image = [UIImage systemImageNamed:@"magnifyingglass"];
-        cell.textLabel.text = (self.minecraftVersion.length && self.loader.length)
-            ? @"No compatible mods found"
-            : @"Select an installed Fabric, Quilt, Forge or NeoForge version in this profile first.";
-        cell.detailTextLabel.text = (self.minecraftVersion.length && self.loader.length)
-            ? @"Try another search or sort option." : @"Return to the profile and choose a supported mod loader.";
+        cell.textLabel.text = [self hasResolvedCompatibility]
+            ? [NSString stringWithFormat:@"No compatible %@ found",
+                AmethystContentPlural(self.contentType).lowercaseString]
+            : (self.contentType == AmethystContentTypeMod
+                ? @"Select an installed Fabric, Quilt, Forge or NeoForge version in this profile first."
+                : @"Select a Minecraft version in this profile first.");
+        cell.detailTextLabel.text = [self hasResolvedCompatibility]
+            ? @"Try another search, filter, or sort option."
+            : @"Return to the profile and choose a compatible game version.";
         cell.accessoryType = UITableViewCellAccessoryNone;
         cell.userInteractionEnabled = NO;
         return cell;
@@ -655,7 +929,9 @@ static NSURL *AmethystArtworkURL(id value) {
     else if (downloads >= 1000) downloadText = [NSString stringWithFormat:@"%.1fK", downloads / 1000.0];
     else downloadText = [NSString stringWithFormat:@"%llu", downloads];
     return [NSString stringWithFormat:@"↓ %@ downloads  •  %@",
-        downloadText, self.loader.capitalizedString ?: @"Mod"];
+        downloadText, self.contentType == AmethystContentTypeMod
+            ? (self.loader.capitalizedString ?: @"Mod")
+            : AmethystContentSingular(self.contentType).capitalizedString];
 }
 
 - (void)getButtonTapped:(UIButton *)sender {
@@ -670,7 +946,7 @@ static NSURL *AmethystArtworkURL(id value) {
     if (self.results.count == 0) return;
     NSDictionary *item = self.results[indexPath.row];
     ModrinthModDetailViewController *detail = [[ModrinthModDetailViewController alloc]
-        initWithItem:item minecraftVersion:self.minecraftVersion loader:self.loader
+        initWithItem:item minecraftVersion:self.minecraftVersion loader:self.versionLoaderFilter
         installed:[self.installedProjectIds containsObject:item[@"id"]]];
     detail.delegate = self;
     [self.navigationController pushViewController:detail animated:YES];
@@ -682,7 +958,7 @@ static NSURL *AmethystArtworkURL(id value) {
     }
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSArray *versions = [self.api compatibleVersionsForProject:item[@"id"]
-            minecraftVersion:self.minecraftVersion loader:self.loader includeChangelog:NO];
+            minecraftVersion:self.minecraftVersion loader:self.versionLoaderFilter includeChangelog:NO];
         NSError *versionError = versions ? nil : self.api.lastError;
         dispatch_async(dispatch_get_main_queue(), ^{
             if ([cell isKindOfClass:AmethystModStoreCell.class]) {
@@ -694,7 +970,9 @@ static NSURL *AmethystArtworkURL(id value) {
                 return;
             }
             if (versions.count == 0) {
-                showDialog(@"No compatible version", @"This project has no downloadable version for the selected Minecraft version and loader.");
+                showDialog(@"No compatible version", self.contentType == AmethystContentTypeMod
+                    ? @"This project has no downloadable version for the selected Minecraft version and loader."
+                    : @"This project has no downloadable version for the selected Minecraft version.");
                 return;
             }
             [self presentVersions:versions forItem:item sourceView:cell];
@@ -705,7 +983,9 @@ static NSURL *AmethystArtworkURL(id value) {
 - (void)presentVersions:(NSArray<NSDictionary *> *)versions
     forItem:(NSDictionary *)item sourceView:(UIView *)sourceView {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:item[@"title"]
-        message:[NSString stringWithFormat:@"Minecraft %@ • %@", self.minecraftVersion, self.loader.capitalizedString]
+        message:self.contentType == AmethystContentTypeMod
+            ? [NSString stringWithFormat:@"Minecraft %@ • %@", self.minecraftVersion, self.loader.capitalizedString]
+            : [NSString stringWithFormat:@"Minecraft %@", self.minecraftVersion]
         preferredStyle:UIAlertControllerStyleActionSheet];
     sheet.popoverPresentationController.sourceView = sourceView;
     sheet.popoverPresentationController.sourceRect = sourceView.bounds;
@@ -716,7 +996,11 @@ static NSURL *AmethystArtworkURL(id value) {
         [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)),
                 dispatch_get_main_queue(), ^{
-                [self presentInstallOptionsForVersion:version project:item sourceView:sourceView];
+                if (self.contentType == AmethystContentTypeMod) {
+                    [self presentInstallOptionsForVersion:version project:item sourceView:sourceView];
+                } else {
+                    [self installVersion:version project:item includeDependencies:NO];
+                }
             });
         }]];
     }
@@ -755,13 +1039,15 @@ static NSURL *AmethystArtworkURL(id value) {
     UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc]
         initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     [spinner startAnimating];
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:spinner];
+    self.navigationItem.rightBarButtonItems = @[
+        self.filterButton, [[UIBarButtonItem alloc] initWithCustomView:spinner]
+    ];
     self.navigationItem.prompt = [NSString stringWithFormat:@"Installing %@…", project[@"title"]];
 
     NSMutableSet *visited = [NSMutableSet new];
     [self installVersion:version visited:visited includeDependencies:includeDependencies completion:^(NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            self.navigationItem.rightBarButtonItem = nil;
+            self.navigationItem.rightBarButtonItems = @[self.filterButton];
             self.navigationItem.prompt = nil;
             if (error) {
                 showDialog(@"Installation failed", error.localizedDescription);
@@ -769,10 +1055,14 @@ static NSURL *AmethystArtworkURL(id value) {
                 NSString *projectId = project[@"id"];
                 if (projectId.length > 0) [self.installedProjectIds addObject:projectId];
                 [self.tableView reloadData];
-                UIAlertController *done = [UIAlertController alertControllerWithTitle:@"Mod installed"
+                NSString *singular = AmethystContentSingular(self.contentType);
+                UIAlertController *done = [UIAlertController alertControllerWithTitle:
+                    [NSString stringWithFormat:@"%@ installed", singular.capitalizedString]
                     message:includeDependencies
                         ? [NSString stringWithFormat:@"%@ and its required dependencies were added to this profile.", project[@"title"]]
-                        : [NSString stringWithFormat:@"%@ was installed without its dependencies.", project[@"title"]]
+                        : [NSString stringWithFormat:@"%@ was added to this profile.%@", project[@"title"],
+                            self.contentType == AmethystContentTypeMod
+                                ? @" Dependencies were not installed." : @" Enable it from Minecraft settings."]
                     preferredStyle:UIAlertControllerStyleAlert];
                 [done addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
                 [self presentViewController:done animated:YES completion:nil];
@@ -860,7 +1150,7 @@ static NSURL *AmethystArtworkURL(id value) {
             resolved = [self.api getEndpoint:[NSString stringWithFormat:@"version/%@", dependency[@"version_id"]] params:nil];
         } else if ([dependency[@"project_id"] isKindOfClass:NSString.class]) {
             NSArray *versions = [self.api compatibleVersionsForProject:dependency[@"project_id"]
-                minecraftVersion:self.minecraftVersion loader:self.loader includeChangelog:NO];
+                minecraftVersion:self.minecraftVersion loader:self.versionLoaderFilter includeChangelog:NO];
             resolved = versions.firstObject;
         }
         completion(resolved, resolved ? nil : self.api.lastError);
@@ -871,9 +1161,12 @@ static NSURL *AmethystArtworkURL(id value) {
     NSDictionary *file = [self primaryFileForVersion:version];
     NSURL *url = [NSURL URLWithString:file[@"url"]];
     NSString *filename = [file[@"filename"] lastPathComponent];
-    if (!url || filename.length == 0 || ![filename.lowercaseString hasSuffix:@".jar"]) {
+    NSString *expectedSuffix = [@"." stringByAppendingString:AmethystContentExtension(self.contentType)];
+    if (!url || filename.length == 0 || ![filename.lowercaseString hasSuffix:expectedSuffix]) {
         completion([NSError errorWithDomain:@"AmethystModManager" code:3
-            userInfo:@{NSLocalizedDescriptionKey: @"Modrinth returned a version without a downloadable JAR."}]);
+            userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:
+                @"Modrinth returned a version without a downloadable %@ file.",
+                AmethystContentExtension(self.contentType).uppercaseString]}]);
         return;
     }
 
@@ -883,14 +1176,14 @@ static NSURL *AmethystArtworkURL(id value) {
         NSHTTPURLResponse *http = (id)response;
         if (http.statusCode < 200 || http.statusCode >= 300) {
             completion([NSError errorWithDomain:@"AmethystModManager" code:http.statusCode
-                userInfo:@{NSLocalizedDescriptionKey: @"The mod download server returned an error."}]);
+                userInfo:@{NSLocalizedDescriptionKey: @"The content download server returned an error."}]);
             return;
         }
         NSString *expectedSHA512 = file[@"hashes"][@"sha512"];
         if (expectedSHA512.length > 0 && ![[self sha512ForFile:temporaryURL.path]
             isEqualToString:expectedSHA512.lowercaseString]) {
             completion([NSError errorWithDomain:@"AmethystModManager" code:4
-                userInfo:@{NSLocalizedDescriptionKey: @"The downloaded JAR failed its SHA-512 integrity check."}]);
+                userInfo:@{NSLocalizedDescriptionKey: @"The downloaded file failed its SHA-512 integrity check."}]);
             return;
         }
         NSError *installError = nil;
@@ -933,8 +1226,10 @@ static NSURL *AmethystArtworkURL(id value) {
             return NO;
         }
 
-        [NSFileManager.defaultManager removeItemAtPath:
-            [destination stringByAppendingString:AmethystDisabledModSuffix] error:nil];
+        if (self.contentType == AmethystContentTypeMod) {
+            [NSFileManager.defaultManager removeItemAtPath:
+                [destination stringByAppendingString:AmethystDisabledModSuffix] error:nil];
+        }
 
         NSString *registryPath = [self.modsDirectory stringByAppendingPathComponent:@".amethyst-modrinth.json"];
         NSData *registryData = [NSData dataWithContentsOfFile:registryPath];
@@ -949,8 +1244,10 @@ static NSURL *AmethystArtworkURL(id value) {
             ![previousFilename isEqualToString:filename]) {
             NSString *previousPath = [self.modsDirectory stringByAppendingPathComponent:previousFilename.lastPathComponent];
             [NSFileManager.defaultManager removeItemAtPath:previousPath error:nil];
-            [NSFileManager.defaultManager removeItemAtPath:
-                [previousPath stringByAppendingString:AmethystDisabledModSuffix] error:nil];
+            if (self.contentType == AmethystContentTypeMod) {
+                [NSFileManager.defaultManager removeItemAtPath:
+                    [previousPath stringByAppendingString:AmethystDisabledModSuffix] error:nil];
+            }
         }
         if (projectId.length > 0) registry[projectId] = filename;
 

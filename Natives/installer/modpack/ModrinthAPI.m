@@ -27,19 +27,33 @@ static BOOL AmethystModrinthArrayContainsString(NSArray *values, NSString *targe
 
 - (NSMutableArray *)searchModWithFilters:(NSDictionary<NSString *, NSString *> *)searchFilters previousPageResult:(NSMutableArray *)modrinthSearchResult {
     int limit = 50;
+    NSString *projectType = AmethystModrinthString(searchFilters[@"projectType"]);
+    if (!projectType) projectType = searchFilters[@"isModpack"].boolValue ? @"modpack" : @"mod";
 
     NSMutableString *facetString = [NSMutableString new];
     [facetString appendString:@"["];
-    [facetString appendFormat:@"[\"project_type:%@\"]", searchFilters[@"isModpack"].boolValue ? @"modpack" : @"mod"];
+    [facetString appendFormat:@"[\"project_type:%@\"]", projectType];
     if (searchFilters[@"mcVersion"].length > 0) {
         [facetString appendFormat:@",[\"versions:%@\"]", searchFilters[@"mcVersion"]];
     }
     if (searchFilters[@"loader"].length > 0) {
         [facetString appendFormat:@",[\"categories:%@\"]", searchFilters[@"loader"]];
     }
-    if (![searchFilters[@"isModpack"] boolValue]) {
-        [facetString appendString:
-            @",[\"environment:client_and_server\",\"environment:client_only\",\"environment:client_only_server_optional\",\"environment:singleplayer_only\",\"environment:client_or_server\",\"environment:client_or_server_prefers_both\"]"];
+    if (searchFilters[@"category"].length > 0) {
+        [facetString appendFormat:@",[\"categories:%@\"]", searchFilters[@"category"]];
+    }
+    if ([projectType isEqualToString:@"mod"]) {
+        NSString *environment = searchFilters[@"environment"];
+        if ([environment isEqualToString:@"client_only"]) {
+            [facetString appendString:
+                @",[\"environment:client_only\",\"environment:client_only_server_optional\",\"environment:singleplayer_only\"]"];
+        } else if ([environment isEqualToString:@"client_and_server"]) {
+            [facetString appendString:
+                @",[\"environment:client_and_server\",\"environment:client_or_server\",\"environment:client_or_server_prefers_both\"]"];
+        } else {
+            [facetString appendString:
+                @",[\"environment:client_and_server\",\"environment:client_only\",\"environment:client_only_server_optional\",\"environment:singleplayer_only\",\"environment:client_or_server\",\"environment:client_or_server_prefers_both\"]"];
+        }
     }
     [facetString appendString:@"]"];
 
@@ -57,7 +71,8 @@ static BOOL AmethystModrinthArrayContainsString(NSArray *values, NSString *targe
 
     NSMutableArray *result = modrinthSearchResult ?: [NSMutableArray new];
     for (NSDictionary *hit in response[@"hits"]) {
-        BOOL isModpack = [hit[@"project_type"] isEqualToString:@"modpack"];
+        NSString *resultProjectType = AmethystModrinthString(hit[@"project_type"]) ?: projectType;
+        BOOL isModpack = [resultProjectType isEqualToString:@"modpack"];
         NSArray *gallery = AmethystModrinthArray(hit[@"gallery"]);
         NSString *galleryArtwork = AmethystModrinthString(hit[@"featured_gallery"]);
         if (!galleryArtwork) {
@@ -72,6 +87,7 @@ static BOOL AmethystModrinthArrayContainsString(NSArray *values, NSString *targe
         [result addObject:@{
             @"apiSource": @(1), // Constant MODRINTH
             @"isModpack": @(isModpack),
+            @"projectType": resultProjectType,
             @"id": AmethystModrinthString(hit[@"project_id"]) ?: @"",
             @"title": AmethystModrinthString(hit[@"title"]) ?: @"Untitled project",
             @"description": AmethystModrinthString(hit[@"description"]) ?: @"",
