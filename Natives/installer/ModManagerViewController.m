@@ -1,5 +1,7 @@
 #import "AFNetworking.h"
+#import "installer/LiquidGlassCompat.h"
 #import "ModManagerViewController.h"
+#import "installer/ModrinthModDetailViewController.h"
 #import "UIKit+AFNetworking.h"
 #import "installer/modpack/ModrinthAPI.h"
 #import "LauncherPreferences.h"
@@ -242,12 +244,10 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
     self.backgroundColor = UIColor.clearColor;
     self.selectionStyle = UITableViewCellSelectionStyleNone;
 
-    self.cardView = [UIView new];
+    self.cardView = AmethystCreateGlassView(18.0, YES, nil);
     self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.cardView.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
-    self.cardView.layer.cornerRadius = 18.0;
-    self.cardView.layer.cornerCurve = kCACornerCurveContinuous;
     [self.contentView addSubview:self.cardView];
+    UIView *cardContent = [(UIVisualEffectView *)self.cardView contentView];
 
     self.modIconView = [UIImageView new];
     self.modIconView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -256,49 +256,47 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
     self.modIconView.layer.cornerRadius = 16.0;
     self.modIconView.layer.cornerCurve = kCACornerCurveContinuous;
     self.modIconView.backgroundColor = UIColor.tertiarySystemFillColor;
-    [self.cardView addSubview:self.modIconView];
+    [cardContent addSubview:self.modIconView];
 
     self.nameLabel = [UILabel new];
     self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.nameLabel.font = [UIFont systemFontOfSize:17.0 weight:UIFontWeightSemibold];
     self.nameLabel.adjustsFontForContentSizeCategory = YES;
     self.nameLabel.numberOfLines = 1;
-    [self.cardView addSubview:self.nameLabel];
+    [cardContent addSubview:self.nameLabel];
 
     self.creatorLabel = [UILabel new];
     self.creatorLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.creatorLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
     self.creatorLabel.textColor = UIColor.secondaryLabelColor;
     self.creatorLabel.numberOfLines = 1;
-    [self.cardView addSubview:self.creatorLabel];
+    [cardContent addSubview:self.creatorLabel];
 
     self.summaryLabel = [UILabel new];
     self.summaryLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.summaryLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
     self.summaryLabel.textColor = UIColor.secondaryLabelColor;
     self.summaryLabel.numberOfLines = 2;
-    [self.cardView addSubview:self.summaryLabel];
+    [cardContent addSubview:self.summaryLabel];
 
     self.metadataLabel = [UILabel new];
     self.metadataLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.metadataLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
     self.metadataLabel.textColor = UIColor.tertiaryLabelColor;
     self.metadataLabel.numberOfLines = 1;
-    [self.cardView addSubview:self.metadataLabel];
+    [cardContent addSubview:self.metadataLabel];
 
     self.getButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.getButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.getButton.titleLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightBold];
-    self.getButton.backgroundColor = UIColor.tertiarySystemFillColor;
-    self.getButton.layer.cornerRadius = 16.0;
-    self.getButton.layer.cornerCurve = kCACornerCurveContinuous;
-    [self.cardView addSubview:self.getButton];
+    [cardContent addSubview:self.getButton];
+    AmethystInstallGlassBackground(self.getButton, 16.0, YES, nil);
 
     self.activityIndicator = [[UIActivityIndicatorView alloc]
         initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.activityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
     self.activityIndicator.hidesWhenStopped = YES;
-    [self.cardView addSubview:self.activityIndicator];
+    [cardContent addSubview:self.activityIndicator];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.cardView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6.0],
@@ -352,7 +350,8 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
 
     [self.getButton setTitle:installed ? @"INSTALLED" : @"GET" forState:UIControlStateNormal];
     self.getButton.enabled = !installed;
-    self.getButton.backgroundColor = installed ? UIColor.quaternarySystemFillColor : UIColor.tertiarySystemFillColor;
+    AmethystInstallGlassBackground(self.getButton, 16.0, !installed,
+        installed ? UIColor.systemGrayColor : self.tintColor);
     [self.getButton setTitleColor:installed ? UIColor.tertiaryLabelColor : self.tintColor
         forState:UIControlStateNormal];
 
@@ -370,7 +369,7 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
 
 @end
 
-@interface ModrinthModBrowserViewController ()
+@interface ModrinthModBrowserViewController ()<ModrinthModDetailViewControllerDelegate>
 @property(nonatomic) NSDictionary *profile;
 @property(nonatomic) NSString *modsDirectory;
 @property(nonatomic) NSString *minecraftVersion;
@@ -629,8 +628,12 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (self.results.count == 0) return;
-    NSMutableDictionary *item = self.results[indexPath.row];
-    [self loadVersionsForItem:item fromCell:[tableView cellForRowAtIndexPath:indexPath]];
+    NSDictionary *item = self.results[indexPath.row];
+    ModrinthModDetailViewController *detail = [[ModrinthModDetailViewController alloc]
+        initWithItem:item minecraftVersion:self.minecraftVersion loader:self.loader
+        installed:[self.installedProjectIds containsObject:item[@"id"]]];
+    detail.delegate = self;
+    [self.navigationController pushViewController:detail animated:YES];
 }
 
 - (void)loadVersionsForItem:(NSMutableDictionary *)item fromCell:(UITableViewCell *)cell {
@@ -669,9 +672,31 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
         NSDictionary *version = versions[index];
         NSString *title = version[@"name"] ?: version[@"version_number"];
         [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-            [self installVersion:version project:item];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)),
+                dispatch_get_main_queue(), ^{
+                [self presentInstallOptionsForVersion:version project:item sourceView:sourceView];
+            });
         }]];
     }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentInstallOptionsForVersion:(NSDictionary *)version
+    project:(NSDictionary *)project sourceView:(UIView *)sourceView {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Install options"
+        message:@"Required dependencies are recommended. Installing without them may prevent the mod from loading."
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    sheet.popoverPresentationController.sourceView = sourceView;
+    sheet.popoverPresentationController.sourceRect = sourceView.bounds;
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Install with Dependencies"
+        style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        [self installVersion:version project:project includeDependencies:YES];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Install Mod Only"
+        style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        [self installVersion:version project:project includeDependencies:NO];
+    }]];
     [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     [self presentViewController:sheet animated:YES completion:nil];
 }
@@ -683,7 +708,8 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
     return [version[@"files"] firstObject];
 }
 
-- (void)installVersion:(NSDictionary *)version project:(NSDictionary *)project {
+- (void)installVersion:(NSDictionary *)version project:(NSDictionary *)project
+    includeDependencies:(BOOL)includeDependencies {
     UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc]
         initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     [spinner startAnimating];
@@ -691,7 +717,7 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
     self.navigationItem.prompt = [NSString stringWithFormat:@"Installing %@…", project[@"title"]];
 
     NSMutableSet *visited = [NSMutableSet new];
-    [self installVersion:version visited:visited completion:^(NSError *error) {
+    [self installVersion:version visited:visited includeDependencies:includeDependencies completion:^(NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             self.navigationItem.rightBarButtonItem = nil;
             self.navigationItem.prompt = nil;
@@ -702,7 +728,9 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
                 if (projectId.length > 0) [self.installedProjectIds addObject:projectId];
                 [self.tableView reloadData];
                 UIAlertController *done = [UIAlertController alertControllerWithTitle:@"Mod installed"
-                    message:[NSString stringWithFormat:@"%@ and its required dependencies were added to this profile.", project[@"title"]]
+                    message:includeDependencies
+                        ? [NSString stringWithFormat:@"%@ and its required dependencies were added to this profile.", project[@"title"]]
+                        : [NSString stringWithFormat:@"%@ was installed without its dependencies.", project[@"title"]]
                     preferredStyle:UIAlertControllerStyleAlert];
                 [done addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
                 [self presentViewController:done animated:YES completion:nil];
@@ -711,8 +739,26 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
     }];
 }
 
+- (void)modDetailViewController:(ModrinthModDetailViewController *)controller
+    installVersion:(NSDictionary *)version project:(NSDictionary *)project
+    includeDependencies:(BOOL)includeDependencies {
+    [controller setInstalling:YES];
+    NSMutableSet *visited = [NSMutableSet new];
+    [self installVersion:version visited:visited includeDependencies:includeDependencies
+        completion:^(NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!error) {
+                NSString *projectId = project[@"id"];
+                if (projectId.length > 0) [self.installedProjectIds addObject:projectId];
+                [self.tableView reloadData];
+            }
+            [controller installationDidFinishWithError:error];
+        });
+    }];
+}
+
 - (void)installVersion:(NSDictionary *)version visited:(NSMutableSet *)visited
-    completion:(void (^)(NSError *error))completion {
+    includeDependencies:(BOOL)includeDependencies completion:(void (^)(NSError *error))completion {
     NSString *versionId = version[@"id"];
     if (!versionId) {
         completion(nil);
@@ -726,10 +772,12 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
         [visited addObject:versionId];
     }
 
-    NSArray *requiredDependencies = [version[@"dependencies"] filteredArrayUsingPredicate:
-        [NSPredicate predicateWithBlock:^BOOL(NSDictionary *dependency, NSDictionary *bindings) {
-            return [dependency[@"dependency_type"] isEqualToString:@"required"];
-        }]];
+    NSArray *requiredDependencies = includeDependencies
+        ? [version[@"dependencies"] filteredArrayUsingPredicate:
+            [NSPredicate predicateWithBlock:^BOOL(NSDictionary *dependency, NSDictionary *bindings) {
+                return [dependency[@"dependency_type"] isEqualToString:@"required"];
+            }]]
+        : @[];
 
     dispatch_group_t dependencyGroup = dispatch_group_create();
     __block NSError *dependencyError = nil;
@@ -744,7 +792,7 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
                 dispatch_group_leave(dependencyGroup);
                 return;
             }
-            [self installVersion:dependencyVersion visited:visited completion:^(NSError *error) {
+            [self installVersion:dependencyVersion visited:visited includeDependencies:YES completion:^(NSError *error) {
                 if (error) {
                     @synchronized (visited) { dependencyError = error; }
                 }
