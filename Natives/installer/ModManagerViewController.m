@@ -220,6 +220,156 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
 
 #pragma mark - Modrinth browser
 
+@interface AmethystModStoreCell : UITableViewCell
+@property(nonatomic, strong) UIView *cardView;
+@property(nonatomic, strong) UIImageView *modIconView;
+@property(nonatomic, strong) UILabel *nameLabel;
+@property(nonatomic, strong) UILabel *creatorLabel;
+@property(nonatomic, strong) UILabel *summaryLabel;
+@property(nonatomic, strong) UILabel *metadataLabel;
+@property(nonatomic, strong) UIButton *getButton;
+@property(nonatomic, strong) UIActivityIndicatorView *activityIndicator;
+- (void)configureWithItem:(NSDictionary *)item installed:(BOOL)installed metadata:(NSString *)metadata;
+- (void)setLoading:(BOOL)loading;
+@end
+
+@implementation AmethystModStoreCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (!self) return nil;
+
+    self.backgroundColor = UIColor.clearColor;
+    self.selectionStyle = UITableViewCellSelectionStyleNone;
+
+    self.cardView = [UIView new];
+    self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.cardView.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
+    self.cardView.layer.cornerRadius = 18.0;
+    self.cardView.layer.cornerCurve = kCACornerCurveContinuous;
+    [self.contentView addSubview:self.cardView];
+
+    self.modIconView = [UIImageView new];
+    self.modIconView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.modIconView.contentMode = UIViewContentModeScaleAspectFill;
+    self.modIconView.clipsToBounds = YES;
+    self.modIconView.layer.cornerRadius = 16.0;
+    self.modIconView.layer.cornerCurve = kCACornerCurveContinuous;
+    self.modIconView.backgroundColor = UIColor.tertiarySystemFillColor;
+    [self.cardView addSubview:self.modIconView];
+
+    self.nameLabel = [UILabel new];
+    self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.nameLabel.font = [UIFont systemFontOfSize:17.0 weight:UIFontWeightSemibold];
+    self.nameLabel.adjustsFontForContentSizeCategory = YES;
+    self.nameLabel.numberOfLines = 1;
+    [self.cardView addSubview:self.nameLabel];
+
+    self.creatorLabel = [UILabel new];
+    self.creatorLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.creatorLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+    self.creatorLabel.textColor = UIColor.secondaryLabelColor;
+    self.creatorLabel.numberOfLines = 1;
+    [self.cardView addSubview:self.creatorLabel];
+
+    self.summaryLabel = [UILabel new];
+    self.summaryLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.summaryLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    self.summaryLabel.textColor = UIColor.secondaryLabelColor;
+    self.summaryLabel.numberOfLines = 2;
+    [self.cardView addSubview:self.summaryLabel];
+
+    self.metadataLabel = [UILabel new];
+    self.metadataLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.metadataLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
+    self.metadataLabel.textColor = UIColor.tertiaryLabelColor;
+    self.metadataLabel.numberOfLines = 1;
+    [self.cardView addSubview:self.metadataLabel];
+
+    self.getButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.getButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.getButton.titleLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightBold];
+    self.getButton.backgroundColor = UIColor.tertiarySystemFillColor;
+    self.getButton.layer.cornerRadius = 16.0;
+    self.getButton.layer.cornerCurve = kCACornerCurveContinuous;
+    [self.cardView addSubview:self.getButton];
+
+    self.activityIndicator = [[UIActivityIndicatorView alloc]
+        initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    self.activityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+    self.activityIndicator.hidesWhenStopped = YES;
+    [self.cardView addSubview:self.activityIndicator];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.cardView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6.0],
+        [self.cardView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
+        [self.cardView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
+        [self.cardView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6.0],
+
+        [self.modIconView.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:14.0],
+        [self.modIconView.centerYAnchor constraintEqualToAnchor:self.cardView.centerYAnchor],
+        [self.modIconView.widthAnchor constraintEqualToConstant:78.0],
+        [self.modIconView.heightAnchor constraintEqualToConstant:78.0],
+
+        [self.getButton.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-14.0],
+        [self.getButton.centerYAnchor constraintEqualToAnchor:self.cardView.centerYAnchor],
+        [self.getButton.widthAnchor constraintEqualToConstant:84.0],
+        [self.getButton.heightAnchor constraintEqualToConstant:32.0],
+        [self.activityIndicator.centerXAnchor constraintEqualToAnchor:self.getButton.centerXAnchor],
+        [self.activityIndicator.centerYAnchor constraintEqualToAnchor:self.getButton.centerYAnchor],
+
+        [self.nameLabel.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:12.0],
+        [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.modIconView.trailingAnchor constant:14.0],
+        [self.nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.getButton.leadingAnchor constant:-10.0],
+        [self.creatorLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:1.0],
+        [self.creatorLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
+        [self.creatorLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.getButton.leadingAnchor constant:-10.0],
+        [self.summaryLabel.topAnchor constraintEqualToAnchor:self.creatorLabel.bottomAnchor constant:5.0],
+        [self.summaryLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
+        [self.summaryLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.getButton.leadingAnchor constant:-10.0],
+        [self.metadataLabel.topAnchor constraintGreaterThanOrEqualToAnchor:self.summaryLabel.bottomAnchor constant:3.0],
+        [self.metadataLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
+        [self.metadataLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.getButton.leadingAnchor constant:-10.0],
+        [self.metadataLabel.bottomAnchor constraintEqualToAnchor:self.cardView.bottomAnchor constant:-10.0]
+    ]];
+    return self;
+}
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    [self.modIconView cancelImageDownloadTask];
+    self.modIconView.image = [UIImage imageNamed:@"DefaultProfile"];
+    [self setLoading:NO];
+}
+
+- (void)configureWithItem:(NSDictionary *)item installed:(BOOL)installed metadata:(NSString *)metadata {
+    self.nameLabel.text = item[@"title"];
+    self.creatorLabel.text = [NSString stringWithFormat:@"By %@", item[@"author"] ?: @"Modrinth creator"];
+    self.summaryLabel.text = item[@"description"];
+    self.metadataLabel.text = metadata;
+    self.accessibilityLabel = [NSString stringWithFormat:@"%@, %@, %@",
+        self.nameLabel.text ?: @"Mod", self.creatorLabel.text ?: @"", metadata ?: @""];
+
+    [self.getButton setTitle:installed ? @"INSTALLED" : @"GET" forState:UIControlStateNormal];
+    self.getButton.enabled = !installed;
+    self.getButton.backgroundColor = installed ? UIColor.quaternarySystemFillColor : UIColor.tertiarySystemFillColor;
+    [self.getButton setTitleColor:installed ? UIColor.tertiaryLabelColor : self.tintColor
+        forState:UIControlStateNormal];
+
+    UIImage *placeholder = [UIImage imageNamed:@"DefaultProfile"];
+    self.modIconView.image = placeholder;
+    NSURL *imageURL = [NSURL URLWithString:item[@"imageUrl"]];
+    if (imageURL) [self.modIconView setImageWithURL:imageURL placeholderImage:placeholder];
+}
+
+- (void)setLoading:(BOOL)loading {
+    self.getButton.hidden = loading;
+    if (loading) [self.activityIndicator startAnimating];
+    else [self.activityIndicator stopAnimating];
+}
+
+@end
+
 @interface ModrinthModBrowserViewController ()
 @property(nonatomic) NSDictionary *profile;
 @property(nonatomic) NSString *modsDirectory;
@@ -229,6 +379,9 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
 @property(nonatomic) NSMutableArray *results;
 @property(nonatomic) ModrinthAPI *api;
 @property(nonatomic) BOOL loading;
+@property(nonatomic) NSInteger selectedSort;
+@property(nonatomic) UISegmentedControl *sortControl;
+@property(nonatomic) NSMutableSet<NSString *> *installedProjectIds;
 @end
 
 @implementation ModrinthModBrowserViewController
@@ -238,7 +391,7 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
     if (self) {
         self.profile = profile;
         self.modsDirectory = modsDirectory;
-        self.title = @"Browse Modrinth";
+        self.title = @"Mods";
         [self resolveCompatibility];
     }
     return self;
@@ -272,12 +425,21 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
     [super viewDidLoad];
     self.api = [ModrinthAPI new];
     self.results = [NSMutableArray new];
+    self.installedProjectIds = [NSMutableSet new];
+    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    self.tableView.rowHeight = 130.0;
+    self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
+    self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
+
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
     self.searchController.searchResultsUpdater = self;
     self.searchController.obscuresBackgroundDuringPresentation = NO;
+    self.searchController.searchBar.placeholder = @"Search mods";
+    self.searchController.searchBar.autocapitalizationType = UITextAutocapitalizationTypeNone;
     self.navigationItem.searchController = self.searchController;
-    self.navigationItem.prompt = [NSString stringWithFormat:@"%@ • %@",
-        self.minecraftVersion ?: @"Unknown Minecraft version", self.loader.capitalizedString ?: @"Unknown loader"];
+    self.definesPresentationContext = YES;
+    [self buildStoreHeader];
+    [self reloadInstalledProjects];
 
     if (self.minecraftVersion.length == 0 || self.loader.length == 0) {
         self.searchController.searchBar.userInteractionEnabled = NO;
@@ -286,6 +448,84 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
     } else {
         [self performSearchAppending:NO];
     }
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self reloadInstalledProjects];
+    [self.tableView reloadData];
+}
+
+- (void)buildStoreHeader {
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.tableView.bounds.size.width, 166.0)];
+
+    UILabel *eyebrow = [UILabel new];
+    eyebrow.translatesAutoresizingMaskIntoConstraints = NO;
+    eyebrow.text = @"MODRINTH STORE";
+    eyebrow.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
+    eyebrow.textColor = self.view.tintColor;
+    [header addSubview:eyebrow];
+
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = @"Discover Mods";
+    title.font = [UIFont systemFontOfSize:34.0 weight:UIFontWeightBold];
+    title.adjustsFontSizeToFitWidth = YES;
+    title.minimumScaleFactor = 0.8;
+    [header addSubview:title];
+
+    UILabel *compatibility = [UILabel new];
+    compatibility.translatesAutoresizingMaskIntoConstraints = NO;
+    compatibility.text = [NSString stringWithFormat:@"✓  Minecraft %@  •  %@",
+        self.minecraftVersion ?: @"Unknown version", self.loader.capitalizedString ?: @"Unknown loader"];
+    compatibility.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    compatibility.textColor = UIColor.secondaryLabelColor;
+    [header addSubview:compatibility];
+
+    self.sortControl = [[UISegmentedControl alloc] initWithItems:@[@"Featured", @"Popular", @"Updated"]];
+    self.sortControl.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sortControl.selectedSegmentIndex = self.selectedSort;
+    self.sortControl.enabled = self.minecraftVersion.length > 0 && self.loader.length > 0;
+    [self.sortControl addTarget:self action:@selector(sortChanged:) forControlEvents:UIControlEventValueChanged];
+    [header addSubview:self.sortControl];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [eyebrow.topAnchor constraintEqualToAnchor:header.topAnchor constant:14.0],
+        [eyebrow.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:20.0],
+        [eyebrow.trailingAnchor constraintLessThanOrEqualToAnchor:header.trailingAnchor constant:-20.0],
+        [title.topAnchor constraintEqualToAnchor:eyebrow.bottomAnchor constant:3.0],
+        [title.leadingAnchor constraintEqualToAnchor:eyebrow.leadingAnchor],
+        [title.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-20.0],
+        [compatibility.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:3.0],
+        [compatibility.leadingAnchor constraintEqualToAnchor:eyebrow.leadingAnchor],
+        [compatibility.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+        [self.sortControl.topAnchor constraintEqualToAnchor:compatibility.bottomAnchor constant:14.0],
+        [self.sortControl.leadingAnchor constraintEqualToAnchor:eyebrow.leadingAnchor],
+        [self.sortControl.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+        [self.sortControl.heightAnchor constraintEqualToConstant:34.0]
+    ]];
+    self.tableView.tableHeaderView = header;
+}
+
+- (void)reloadInstalledProjects {
+    NSString *registryPath = [self.modsDirectory stringByAppendingPathComponent:@".amethyst-modrinth.json"];
+    NSData *data = [NSData dataWithContentsOfFile:registryPath];
+    NSDictionary *registry = data
+        ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil]
+        : nil;
+    [self.installedProjectIds removeAllObjects];
+    if ([registry isKindOfClass:NSDictionary.class]) {
+        [self.installedProjectIds addObjectsFromArray:registry.allKeys];
+    }
+}
+
+- (NSString *)selectedSortIndex {
+    return @[@"relevance", @"downloads", @"updated"][self.selectedSort];
+}
+
+- (void)sortChanged:(UISegmentedControl *)sender {
+    self.selectedSort = sender.selectedSegmentIndex;
+    [self performSearchAppending:NO];
 }
 
 - (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
@@ -299,6 +539,7 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
     if (self.loading) return;
     self.loading = YES;
     NSString *query = self.searchController.searchBar.text ?: @"";
+    NSString *sortIndex = self.selectedSortIndex;
     UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc]
         initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     [spinner startAnimating];
@@ -308,7 +549,8 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
         @"isModpack": @NO,
         @"name": query,
         @"mcVersion": self.minecraftVersion,
-        @"loader": self.loader
+        @"loader": self.loader,
+        @"index": sortIndex
     };
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSMutableArray *result = [self.api searchModWithFilters:filters
@@ -317,7 +559,7 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
             self.loading = NO;
             self.navigationItem.rightBarButtonItem = nil;
             NSString *currentQuery = self.searchController.searchBar.text ?: @"";
-            if (![query isEqualToString:currentQuery]) {
+            if (![query isEqualToString:currentQuery] || ![sortIndex isEqualToString:self.selectedSortIndex]) {
                 [self performSearchAppending:NO];
                 return;
             }
@@ -328,38 +570,60 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
     });
 }
 
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    if (self.searchController.searchBar.text.length > 0) return @"Search Results";
+    return @[@"Featured for You", @"Most Downloaded", @"Recently Updated"][self.selectedSort];
+}
+
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     return MAX(self.results.count, 1);
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"SearchResult"];
-    if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"SearchResult"];
-    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-    cell.imageView.image = [UIImage imageNamed:@"DefaultProfile"];
-
     if (self.results.count == 0) {
+        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"EmptyResult"];
+        if (!cell) cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"EmptyResult"];
+        cell.backgroundColor = UIColor.clearColor;
+        cell.imageView.image = [UIImage systemImageNamed:@"magnifyingglass"];
         cell.textLabel.text = (self.minecraftVersion.length && self.loader.length)
             ? @"No compatible mods found"
             : @"Select an installed Fabric, Quilt, Forge or NeoForge version in this profile first.";
-        cell.detailTextLabel.text = nil;
+        cell.detailTextLabel.text = (self.minecraftVersion.length && self.loader.length)
+            ? @"Try another search or sort option." : @"Return to the profile and choose a supported mod loader.";
         cell.accessoryType = UITableViewCellAccessoryNone;
         cell.userInteractionEnabled = NO;
         return cell;
     }
 
-    cell.userInteractionEnabled = YES;
+    AmethystModStoreCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModStoreCell"];
+    if (!cell) cell = [[AmethystModStoreCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"ModStoreCell"];
     NSDictionary *item = self.results[indexPath.row];
-    cell.textLabel.text = item[@"title"];
-    cell.detailTextLabel.text = item[@"description"];
-    NSURL *imageURL = [NSURL URLWithString:item[@"imageUrl"]];
-    if (imageURL) {
-        [cell.imageView setImageWithURL:imageURL placeholderImage:[UIImage imageNamed:@"DefaultProfile"]];
-    }
+    BOOL installed = [self.installedProjectIds containsObject:item[@"id"]];
+    [cell configureWithItem:item installed:installed metadata:[self metadataForItem:item]];
+    [cell.getButton removeTarget:nil action:NULL forControlEvents:UIControlEventTouchUpInside];
+    cell.getButton.tag = indexPath.row;
+    [cell.getButton addTarget:self action:@selector(getButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     if (!self.api.reachedLastPage && indexPath.row == self.results.count - 1) {
         [self performSearchAppending:YES];
     }
     return cell;
+}
+
+- (NSString *)metadataForItem:(NSDictionary *)item {
+    unsigned long long downloads = [item[@"downloads"] unsignedLongLongValue];
+    NSString *downloadText;
+    if (downloads >= 1000000) downloadText = [NSString stringWithFormat:@"%.1fM", downloads / 1000000.0];
+    else if (downloads >= 1000) downloadText = [NSString stringWithFormat:@"%.1fK", downloads / 1000.0];
+    else downloadText = [NSString stringWithFormat:@"%llu", downloads];
+    return [NSString stringWithFormat:@"↓ %@ downloads  •  %@",
+        downloadText, self.loader.capitalizedString ?: @"Mod"];
+}
+
+- (void)getButtonTapped:(UIButton *)sender {
+    if (sender.tag >= self.results.count) return;
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:sender.tag inSection:0];
+    AmethystModStoreCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
+    [self loadVersionsForItem:self.results[sender.tag] fromCell:cell];
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -370,10 +634,9 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
 }
 
 - (void)loadVersionsForItem:(NSMutableDictionary *)item fromCell:(UITableViewCell *)cell {
-    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc]
-        initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
-    cell.accessoryView = spinner;
-    [spinner startAnimating];
+    if ([cell isKindOfClass:AmethystModStoreCell.class]) {
+        [(AmethystModStoreCell *)cell setLoading:YES];
+    }
     NSDictionary *params = @{
         @"game_versions": [NSString stringWithFormat:@"[\"%@\"]", self.minecraftVersion],
         @"loaders": [NSString stringWithFormat:@"[\"%@\"]", self.loader]
@@ -382,8 +645,9 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
         NSArray *versions = [self.api getEndpoint:[NSString stringWithFormat:@"project/%@/version", item[@"id"]]
             params:params];
         dispatch_async(dispatch_get_main_queue(), ^{
-            cell.accessoryView = nil;
-            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            if ([cell isKindOfClass:AmethystModStoreCell.class]) {
+                [(AmethystModStoreCell *)cell setLoading:NO];
+            }
             if (versions.count == 0) {
                 showDialog(@"No compatible version", @"This project has no downloadable version for the selected Minecraft version and loader.");
                 return;
@@ -430,11 +694,13 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
     [self installVersion:version visited:visited completion:^(NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             self.navigationItem.rightBarButtonItem = nil;
-            self.navigationItem.prompt = [NSString stringWithFormat:@"%@ • %@",
-                self.minecraftVersion, self.loader.capitalizedString];
+            self.navigationItem.prompt = nil;
             if (error) {
                 showDialog(@"Installation failed", error.localizedDescription);
             } else {
+                NSString *projectId = project[@"id"];
+                if (projectId.length > 0) [self.installedProjectIds addObject:projectId];
+                [self.tableView reloadData];
                 UIAlertController *done = [UIAlertController alertControllerWithTitle:@"Mod installed"
                     message:[NSString stringWithFormat:@"%@ and its required dependencies were added to this profile.", project[@"title"]]
                     preferredStyle:UIAlertControllerStyleAlert];
