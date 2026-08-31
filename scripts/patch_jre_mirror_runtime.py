@@ -27,13 +27,21 @@ MH_MAGIC_64 = 0xFEEDFACF
 CPU_TYPE_ARM64 = 0x0100000C
 LC_SEGMENT_64 = 0x19
 LC_SYMTAB = 0x2
-DETECTOR_SYMBOL = b"__Z27DeviceRequiresTXMWorkaroundv"
-ORIGINAL_PREFIX = bytes.fromhex(
+DETECTOR_SYMBOLS = (
+    b"__Z27DeviceRequiresTXMWorkaroundb",
+    b"__Z27DeviceRequiresTXMWorkaroundv",
+)
+LEGACY_PREFIX = bytes.fromhex(
     "fc6fbda9"  # stp x28, x27, [sp, #-0x30]!
     "f44f01a9"  # stp x20, x19, [sp, #0x10]
     "fd7b02a9"  # stp x29, x30, [sp, #0x20]
     "fd830091"  # add x29, sp, #0x20
 )
+CURRENT_PREFIX = bytes.fromhex(
+    "fd7bbfa9"  # stp x29, x30, [sp, #-0x10]!
+    "fd030091"  # mov x29, sp
+)
+MAX_PREFIX_SIZE = max(len(LEGACY_PREFIX), len(CURRENT_PREFIX))
 RETURN_TRUE = bytes.fromhex(
     "20008052"  # mov w0, #1
     "c0035fd6"  # ret
@@ -115,10 +123,21 @@ def _symbol_file_offset(data: bytes, symbol: bytes) -> int:
     for vm_address, file_offset, file_size in segments:
         if vm_address <= symbol_address < vm_address + file_size:
             result = file_offset + symbol_address - vm_address
-            if result + len(ORIGINAL_PREFIX) > len(data):
+            if result + MAX_PREFIX_SIZE > len(data):
                 raise PatchError("symbol points outside the Mach-O file")
             return result
     raise PatchError("symbol is not backed by a file segment")
+
+
+def _detector_location(data: bytes) -> tuple[int, bytes]:
+    for symbol in DETECTOR_SYMBOLS:
+        try:
+            return _symbol_file_offset(data, symbol), symbol
+        except PatchError as error:
+            if not str(error).startswith("required symbol not found:"):
+                raise
+    names = ", ".join(symbol.decode() for symbol in DETECTOR_SYMBOLS)
+    raise PatchError(f"required detector symbol not found (tried {names})")
 
 
 def _marker_path(libjvm: Path) -> Path:
@@ -134,9 +153,9 @@ def patch_runtime(
     check_only: bool = False,
 ) -> str:
     data = libjvm.read_bytes()
-    detector_offset = _symbol_file_offset(data, DETECTOR_SYMBOL)
+    detector_offset, detector_symbol = _detector_location(data)
     marker = _marker_path(libjvm)
-    detector = data[detector_offset:detector_offset + len(ORIGINAL_PREFIX)]
+    detector = data[detector_offset:detector_offset + MAX_PREFIX_SIZE]
 
     if detector.startswith(RETURN_TRUE):
         if check_only and marker.read_text(errors="replace") != MARKER_CONTENT:
@@ -145,10 +164,14 @@ def patch_runtime(
             marker.write_text(MARKER_CONTENT)
         return "already patched"
 
-    if detector != ORIGINAL_PREFIX:
+    expected_prefix = (
+        CURRENT_PREFIX if detector_symbol.endswith(b"b") else LEGACY_PREFIX
+    )
+    if not detector.startswith(expected_prefix):
         raise PatchError(
             "unsupported DeviceRequiresTXMWorkaround prologue at "
-            f"0x{detector_offset:x}: {detector.hex()}"
+            f"0x{detector_offset:x}: "
+            f"{detector[:len(expected_prefix)].hex()}"
         )
     if check_only:
         raise PatchError("runtime still needs the mirror-mapping detector fix")
