@@ -28,6 +28,7 @@
 
 - (id)getEndpoint:(NSString *)endpoint params:(NSDictionary *)params {
     __block id result;
+    self.lastError = nil;
     dispatch_group_t group = dispatch_group_create();
     dispatch_group_enter(group);
     NSString *url = [self.baseURL stringByAppendingPathComponent:endpoint];
@@ -35,6 +36,7 @@
     NSDictionary *headers = @{@"User-Agent": @"hazerbvisor/Amethyst-iOS-25 (iOS mod manager)"};
     [manager GET:url parameters:params headers:headers progress:nil
     success:^(NSURLSessionTask *task, id obj) {
+        self.lastError = nil;
         result = obj;
         dispatch_group_leave(group);
     } failure:^(NSURLSessionTask *operation, NSError *error) {

@@ -2,6 +2,23 @@
 #import "ModrinthAPI.h"
 #import "PLProfiles.h"
 
+static NSString *AmethystModrinthString(id value) {
+    return [value isKindOfClass:NSString.class] && [value length] > 0 ? value : nil;
+}
+
+static NSArray *AmethystModrinthArray(id value) {
+    return [value isKindOfClass:NSArray.class] ? value : @[];
+}
+
+static BOOL AmethystModrinthArrayContainsString(NSArray *values, NSString *target) {
+    if (target.length == 0) return YES;
+    for (id value in values) {
+        if ([value isKindOfClass:NSString.class] &&
+            [value caseInsensitiveCompare:target] == NSOrderedSame) return YES;
+    }
+    return NO;
+}
+
 @implementation ModrinthAPI
 
 - (instancetype)init {
@@ -41,21 +58,76 @@
     NSMutableArray *result = modrinthSearchResult ?: [NSMutableArray new];
     for (NSDictionary *hit in response[@"hits"]) {
         BOOL isModpack = [hit[@"project_type"] isEqualToString:@"modpack"];
+        NSArray *gallery = AmethystModrinthArray(hit[@"gallery"]);
+        NSString *galleryArtwork = AmethystModrinthString(hit[@"featured_gallery"]);
+        if (!galleryArtwork) {
+            for (id image in gallery) {
+                galleryArtwork = AmethystModrinthString(image);
+                if (galleryArtwork) break;
+            }
+        }
+        NSString *iconArtwork = AmethystModrinthString(hit[@"icon_url"]);
+        NSArray *categories = AmethystModrinthArray(hit[@"display_categories"]);
+        if (categories.count == 0) categories = AmethystModrinthArray(hit[@"categories"]);
         [result addObject:@{
             @"apiSource": @(1), // Constant MODRINTH
             @"isModpack": @(isModpack),
-            @"id": hit[@"project_id"] ?: @"",
-            @"title": hit[@"title"] ?: @"Untitled project",
-            @"description": hit[@"description"] ?: @"",
-            @"imageUrl": hit[@"icon_url"] ?: @"",
-            @"author": hit[@"author"] ?: @"Modrinth creator",
-            @"downloads": hit[@"downloads"] ?: @0,
-            @"dateModified": hit[@"date_modified"] ?: @"",
-            @"categories": hit[@"display_categories"] ?: hit[@"categories"] ?: @[]
+            @"id": AmethystModrinthString(hit[@"project_id"]) ?: @"",
+            @"title": AmethystModrinthString(hit[@"title"]) ?: @"Untitled project",
+            @"description": AmethystModrinthString(hit[@"description"]) ?: @"",
+            @"imageUrl": iconArtwork ?: @"",
+            @"fallbackImageUrl": galleryArtwork ?: @"",
+            @"author": AmethystModrinthString(hit[@"author"]) ?: @"Modrinth creator",
+            @"downloads": [hit[@"downloads"] isKindOfClass:NSNumber.class] ? hit[@"downloads"] : @0,
+            @"dateModified": AmethystModrinthString(hit[@"date_modified"]) ?: @"",
+            @"categories": categories
         }.mutableCopy];
     }
     self.reachedLastPage = result.count >= [response[@"total_hits"] unsignedLongValue];
     return result;
+}
+
+- (NSArray<NSDictionary *> *)compatibleVersionsForProject:(NSString *)projectId
+    minecraftVersion:(NSString *)minecraftVersion
+    loader:(NSString *)loader
+    includeChangelog:(BOOL)includeChangelog {
+    if (projectId.length == 0) return nil;
+
+    NSString *endpoint = [NSString stringWithFormat:@"project/%@/version", projectId];
+    NSMutableDictionary *params = [@{
+        @"include_changelog": includeChangelog ? @"true" : @"false"
+    } mutableCopy];
+    if (minecraftVersion.length > 0) {
+        params[@"game_versions"] = [NSString stringWithFormat:@"[\"%@\"]", minecraftVersion];
+    }
+    if (loader.length > 0) {
+        params[@"loaders"] = [NSString stringWithFormat:@"[\"%@\"]", loader];
+    }
+
+    NSArray *filteredResponse = [self getEndpoint:endpoint params:params];
+    if ([filteredResponse isKindOfClass:NSArray.class] && filteredResponse.count > 0) {
+        return filteredResponse;
+    }
+
+    // A project returned by a filtered search should normally have a matching
+    // version. Retry without server-side filters, then validate the response
+    // locally so a rejected query is not mislabeled as "no compatible version".
+    NSArray *allVersions = [self getEndpoint:endpoint params:@{
+        @"include_changelog": includeChangelog ? @"true" : @"false"
+    }];
+    if (![allVersions isKindOfClass:NSArray.class]) {
+        return [filteredResponse isKindOfClass:NSArray.class] ? filteredResponse : nil;
+    }
+
+    NSMutableArray<NSDictionary *> *compatible = [NSMutableArray new];
+    for (id value in allVersions) {
+        if (![value isKindOfClass:NSDictionary.class]) continue;
+        NSDictionary *version = value;
+        if (!AmethystModrinthArrayContainsString(AmethystModrinthArray(version[@"game_versions"]), minecraftVersion)) continue;
+        if (!AmethystModrinthArrayContainsString(AmethystModrinthArray(version[@"loaders"]), loader)) continue;
+        [compatible addObject:version];
+    }
+    return compatible;
 }
 
 - (void)loadDetailsOfMod:(NSMutableDictionary *)item {
