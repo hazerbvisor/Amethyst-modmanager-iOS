@@ -17,11 +17,18 @@
     if (searchFilters[@"mcVersion"].length > 0) {
         [facetString appendFormat:@",[\"versions:%@\"]", searchFilters[@"mcVersion"]];
     }
+    if (searchFilters[@"loader"].length > 0) {
+        [facetString appendFormat:@",[\"categories:%@\"]", searchFilters[@"loader"]];
+    }
+    if (![searchFilters[@"isModpack"] boolValue]) {
+        [facetString appendString:
+            @",[\"environment:client_and_server\",\"environment:client_only\",\"environment:client_only_server_optional\",\"environment:singleplayer_only\",\"environment:client_or_server\",\"environment:client_or_server_prefers_both\"]"];
+    }
     [facetString appendString:@"]"];
 
     NSDictionary *params = @{
         @"facets": facetString,
-        @"query": [searchFilters[@"name"] stringByReplacingOccurrencesOfString:@" " withString:@"+"],
+        @"query": searchFilters[@"name"] ?: @"",
         @"limit": @(limit),
         @"index": @"relevance",
         @"offset": @(modrinthSearchResult.count)
@@ -37,10 +44,10 @@
         [result addObject:@{
             @"apiSource": @(1), // Constant MODRINTH
             @"isModpack": @(isModpack),
-            @"id": hit[@"project_id"],
-            @"title": hit[@"title"],
-            @"description": hit[@"description"],
-            @"imageUrl": hit[@"icon_url"]
+            @"id": hit[@"project_id"] ?: @"",
+            @"title": hit[@"title"] ?: @"Untitled project",
+            @"description": hit[@"description"] ?: @"",
+            @"imageUrl": hit[@"icon_url"] ?: @""
         }.mutableCopy];
     }
     self.reachedLastPage = result.count >= [response[@"total_hits"] unsignedLongValue];
@@ -59,12 +66,13 @@
     NSMutableArray<NSString *> *sizes = [NSMutableArray new];
     [response enumerateObjectsUsingBlock:
   ^(NSDictionary *version, NSUInteger i, BOOL *stop) {
-        NSDictionary *file = [version[@"files"] firstObject];
-        mcNames[i] = [version[@"game_versions"] firstObject];
-        sizes[i] = file[@"size"];
-        urls[i] = file[@"url"];
+        NSDictionary *file = [[version[@"files"] filteredArrayUsingPredicate:
+            [NSPredicate predicateWithFormat:@"primary == YES"]] firstObject] ?: [version[@"files"] firstObject];
+        [mcNames addObject:[version[@"game_versions"] firstObject] ?: @"Unknown"];
+        [sizes addObject:file[@"size"] ?: @0];
+        [urls addObject:file[@"url"] ?: @""];
         NSDictionary *hashesMap = file[@"hashes"];
-        hashes[i] = hashesMap[@"sha1"] ?: [NSNull null];
+        [hashes addObject:hashesMap[@"sha1"] ?: (id)[NSNull null]];
     }];
     item[@"versionNames"] = names;
     item[@"mcVersionNames"] = mcNames;

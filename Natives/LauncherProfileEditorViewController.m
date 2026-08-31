@@ -4,6 +4,7 @@
 #import "MinecraftResourceUtils.h"
 #import "PickTextField.h"
 #import "PLProfiles.h"
+#import "installer/ModManagerViewController.h"
 #import "UIKit+hook.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
@@ -109,6 +110,11 @@
               @"type": self.typeTextField,
               @"placeholder": [NSString stringWithFormat:@". -> /Documents/instances/%@", getPrefObject(@"general.game_directory")]
             },
+            @{@"key": @"manageMods",
+              @"icon": @"shippingbox",
+              @"title": @"Manage Mods",
+              @"type": self.typeButton
+            },
             // Video and renderer settings
             @{@"key": @"renderer",
               @"icon": @"cpu",
@@ -153,6 +159,18 @@
 
 - (void)actionClose {
     [self.navigationController dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    NSDictionary *item = self.prefContents[indexPath.section][indexPath.row];
+    if ([item[@"key"] isEqualToString:@"manageMods"]) {
+        [tableView deselectRowAtIndexPath:indexPath animated:YES];
+        [self.view endEditing:YES];
+        ModManagerViewController *manager = [[ModManagerViewController alloc] initWithProfile:self.profile];
+        [self.navigationController pushViewController:manager animated:YES];
+        return;
+    }
+    [super tableView:tableView didSelectRowAtIndexPath:indexPath];
 }
 
 - (void)actionDone {
