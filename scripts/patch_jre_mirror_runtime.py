@@ -8,21 +8,26 @@ JRE 21 dereferences the failed opendir result. The launcher only enables the
 option after it has established the Universal JIT protocol, so the detector is
 replaced with an unconditional true return.
 
-The full-file hashes, patch offsets, and expected instruction bytes pin this
-bridge to the exact published runtimes. Unknown or partially modified binaries
-are rejected rather than patched heuristically.
+The detector is located through the Mach-O symbol table so routine upstream JRE
+rebuilds do not invalidate a hard-coded file offset. Its complete expected
+prologue is still verified before writing, so an incompatible implementation is
+rejected rather than patched heuristically.
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import os
+import struct
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 
 
+MH_MAGIC_64 = 0xFEEDFACF
+CPU_TYPE_ARM64 = 0x0100000C
+LC_SEGMENT_64 = 0x19
+LC_SYMTAB = 0x2
+DETECTOR_SYMBOL = b"__Z27DeviceRequiresTXMWorkaroundv"
 ORIGINAL_PREFIX = bytes.fromhex(
     "fc6fbda9"  # stp x28, x27, [sp, #-0x30]!
     "f44f01a9"  # stp x20, x19, [sp, #0x10]
@@ -35,47 +40,85 @@ RETURN_TRUE = bytes.fromhex(
 )
 MARKER_NAME = ".amethyst-mirror-mapping"
 MARKER_CONTENT = "amethyst-mirror-mapping-v1\n"
-
-
-@dataclass(frozen=True)
-class RuntimePatch:
-    detector_offset: int
-    original_sha256: str
-    patched_sha256: str
-
-
-RUNTIMES = {
-    17: RuntimePatch(
-        detector_offset=0x7B3CD0,
-        original_sha256=(
-            "c78b4d75f9ab385cf8c5c936bd925816"
-            "31c4a1491ac0208d7e4519e1312b07ab"
-        ),
-        patched_sha256=(
-            "84cc7bc661d27c04f9d1fd178cd258013"
-            "3198826c811e52c16c428ee71c3de50"
-        ),
-    ),
-    21: RuntimePatch(
-        detector_offset=0x81FB8C,
-        original_sha256=(
-            "628ecae014da8029f4b9182ca4eacb53"
-            "c71c42a95e66f88cb7f09164f76a2c35"
-        ),
-        patched_sha256=(
-            "6c56f8af7b967088baf06ea812add9593"
-            "d6b88fcb849a8afae0df688ba7264bd"
-        ),
-    ),
-}
+SUPPORTED_RUNTIMES = (17, 21)
 
 
 class PatchError(RuntimeError):
     pass
 
 
-def _sha256(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+def _cstring(data: bytes, offset: int, limit: int) -> bytes:
+    if offset < 0 or offset >= limit:
+        raise PatchError(f"invalid Mach-O string offset: {offset}")
+    end = data.find(b"\0", offset, limit)
+    if end < 0:
+        raise PatchError("unterminated Mach-O symbol name")
+    return data[offset:end]
+
+
+def _symbol_file_offset(data: bytes, symbol: bytes) -> int:
+    if len(data) < 32:
+        raise PatchError("file is too small to be a 64-bit Mach-O")
+
+    magic, cpu_type, _, _, ncmds, sizeofcmds, _, _ = struct.unpack_from(
+        "<IiiIIIII", data, 0
+    )
+    if magic != MH_MAGIC_64 or cpu_type != CPU_TYPE_ARM64:
+        raise PatchError("expected an arm64 64-bit Mach-O")
+    if 32 + sizeofcmds > len(data):
+        raise PatchError("truncated Mach-O load commands")
+
+    segments: list[tuple[int, int, int]] = []
+    symtab: tuple[int, int, int, int] | None = None
+    command_offset = 32
+    for _ in range(ncmds):
+        if command_offset + 8 > len(data):
+            raise PatchError("truncated Mach-O load command")
+        command, command_size = struct.unpack_from("<II", data, command_offset)
+        if command_size < 8 or command_offset + command_size > len(data):
+            raise PatchError("invalid Mach-O load command size")
+        if command == LC_SEGMENT_64:
+            if command_size < 72:
+                raise PatchError("truncated LC_SEGMENT_64 command")
+            vm_address, _, file_offset, file_size = struct.unpack_from(
+                "<QQQQ", data, command_offset + 24
+            )
+            segments.append((vm_address, file_offset, file_size))
+        elif command == LC_SYMTAB:
+            if command_size < 24:
+                raise PatchError("truncated LC_SYMTAB command")
+            symtab = struct.unpack_from("<IIII", data, command_offset + 8)
+        command_offset += command_size
+
+    if symtab is None:
+        raise PatchError("Mach-O has no symbol table")
+    symbols_offset, symbol_count, strings_offset, strings_size = symtab
+    symbols_end = symbols_offset + symbol_count * 16
+    strings_end = strings_offset + strings_size
+    if symbols_end > len(data) or strings_end > len(data):
+        raise PatchError("truncated Mach-O symbol or string table")
+
+    symbol_address = None
+    for index in range(symbol_count):
+        entry_offset = symbols_offset + index * 16
+        string_index, _, _, _, value = struct.unpack_from(
+            "<IBBHQ", data, entry_offset
+        )
+        if string_index and _cstring(
+            data, strings_offset + string_index, strings_end
+        ) == symbol:
+            symbol_address = value
+            break
+    if symbol_address is None:
+        raise PatchError(f"required symbol not found: {symbol.decode()}")
+
+    for vm_address, file_offset, file_size in segments:
+        if vm_address <= symbol_address < vm_address + file_size:
+            result = file_offset + symbol_address - vm_address
+            if result + len(ORIGINAL_PREFIX) > len(data):
+                raise PatchError("symbol points outside the Mach-O file")
+            return result
+    raise PatchError("symbol is not backed by a file segment")
 
 
 def _marker_path(libjvm: Path) -> Path:
@@ -90,54 +133,34 @@ def patch_runtime(
     libjvm: Path,
     check_only: bool = False,
 ) -> str:
-    profile = RUNTIMES[runtime_version]
     data = libjvm.read_bytes()
-    digest = _sha256(data)
+    detector_offset = _symbol_file_offset(data, DETECTOR_SYMBOL)
     marker = _marker_path(libjvm)
+    detector = data[detector_offset:detector_offset + len(ORIGINAL_PREFIX)]
 
-    if digest == profile.patched_sha256:
-        if data[
-            profile.detector_offset:
-            profile.detector_offset + len(RETURN_TRUE)
-        ] != RETURN_TRUE:
-            raise PatchError("patched hash has an unexpected detector body")
+    if detector.startswith(RETURN_TRUE):
         if check_only and marker.read_text(errors="replace") != MARKER_CONTENT:
             raise PatchError(f"runtime marker is missing or invalid: {marker}")
         if not check_only:
             marker.write_text(MARKER_CONTENT)
         return "already patched"
 
-    if digest != profile.original_sha256:
+    if detector != ORIGINAL_PREFIX:
         raise PatchError(
-            f"unsupported JRE {runtime_version} SHA-256 "
-            f"(expected {profile.original_sha256} or "
-            f"{profile.patched_sha256}, got {digest})"
-        )
-
-    prefix = data[
-        profile.detector_offset:
-        profile.detector_offset + len(ORIGINAL_PREFIX)
-    ]
-    if prefix != ORIGINAL_PREFIX:
-        raise PatchError(
-            "unexpected DeviceRequiresTXMWorkaround prologue at "
-            f"0x{profile.detector_offset:x}: {prefix.hex()}"
+            "unsupported DeviceRequiresTXMWorkaround prologue at "
+            f"0x{detector_offset:x}: {detector.hex()}"
         )
     if check_only:
         raise PatchError("runtime still needs the mirror-mapping detector fix")
 
     with libjvm.open("r+b") as stream:
-        stream.seek(profile.detector_offset)
+        stream.seek(detector_offset)
         stream.write(RETURN_TRUE)
         stream.flush()
         os.fsync(stream.fileno())
-
-    patched_digest = _sha256(libjvm.read_bytes())
-    if patched_digest != profile.patched_sha256:
-        raise PatchError(
-            "patched runtime hash mismatch "
-            f"(expected {profile.patched_sha256}, got {patched_digest})"
-        )
+    patched = libjvm.read_bytes()
+    if patched[detector_offset:detector_offset + len(RETURN_TRUE)] != RETURN_TRUE:
+        raise PatchError("patched detector instructions did not persist")
     marker.write_text(MARKER_CONTENT)
     return "applied detector fix"
 
@@ -149,7 +172,7 @@ def main() -> int:
         action="store_true",
         help="verify the runtime and marker without modifying them",
     )
-    parser.add_argument("runtime_version", type=int, choices=sorted(RUNTIMES))
+    parser.add_argument("runtime_version", type=int, choices=SUPPORTED_RUNTIMES)
     parser.add_argument("libjvm", type=Path)
     args = parser.parse_args()
 
