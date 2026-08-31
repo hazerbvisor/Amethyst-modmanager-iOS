@@ -115,6 +115,16 @@
               @"title": @"Manage Mods",
               @"type": self.typeButton
             },
+            @{@"key": @"manageResourcePacks",
+              @"icon": @"photo.stack",
+              @"title": @"Manage Resource Packs",
+              @"type": self.typeButton
+            },
+            @{@"key": @"manageShaderPacks",
+              @"icon": @"sparkles",
+              @"title": @"Manage Shaders",
+              @"type": self.typeButton
+            },
             // Video and renderer settings
             @{@"key": @"renderer",
               @"icon": @"cpu",
@@ -167,6 +177,17 @@
         [tableView deselectRowAtIndexPath:indexPath animated:YES];
         [self.view endEditing:YES];
         ModManagerViewController *manager = [[ModManagerViewController alloc] initWithProfile:self.profile];
+        [self.navigationController pushViewController:manager animated:YES];
+        return;
+    }
+    if ([item[@"key"] isEqualToString:@"manageResourcePacks"] ||
+        [item[@"key"] isEqualToString:@"manageShaderPacks"]) {
+        [tableView deselectRowAtIndexPath:indexPath animated:YES];
+        [self.view endEditing:YES];
+        AmethystContentType contentType = [item[@"key"] isEqualToString:@"manageResourcePacks"]
+            ? AmethystContentTypeResourcePack : AmethystContentTypeShaderPack;
+        ModManagerViewController *manager = [[ModManagerViewController alloc]
+            initWithProfile:self.profile contentType:contentType];
         [self.navigationController pushViewController:manager animated:YES];
         return;
     }

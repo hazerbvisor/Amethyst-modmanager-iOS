@@ -79,6 +79,19 @@ static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
 
 @implementation ModrinthModDetailViewController
 
+- (BOOL)isModContent {
+    NSString *projectType = [self.item[@"projectType"] isKindOfClass:NSString.class]
+        ? self.item[@"projectType"] : @"mod";
+    return [projectType isEqualToString:@"mod"];
+}
+
+- (NSString *)contentSingular {
+    NSString *projectType = self.item[@"projectType"];
+    if ([projectType isEqualToString:@"resourcepack"]) return @"resource pack";
+    if ([projectType isEqualToString:@"shader"]) return @"shader pack";
+    return @"mod";
+}
+
 - (instancetype)initWithItem:(NSDictionary *)item
     minecraftVersion:(NSString *)minecraftVersion
     loader:(NSString *)loader
@@ -89,7 +102,8 @@ static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
         self.minecraftVersion = minecraftVersion;
         self.loader = loader;
         self.installed = installed;
-        self.title = item[@"title"] ?: @"Mod Details";
+        self.title = item[@"title"] ?: [NSString stringWithFormat:@"%@ Details",
+            self.contentSingular.capitalizedString];
     }
     return self;
 }
@@ -170,6 +184,7 @@ static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
         initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.downloadSpinner.translatesAutoresizingMaskIntoConstraints = NO;
     self.downloadSpinner.hidesWhenStopped = YES;
+    self.downloadSpinner.color = UIColor.whiteColor;
     [self.downloadButton addSubview:self.downloadSpinner];
 
     self.tabs = [[UISegmentedControl alloc]
@@ -250,10 +265,15 @@ static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
     NSNumber *downloads = project[@"downloads"] ?: self.item[@"downloads"] ?: @0;
     NSNumber *followers = project[@"followers"] ?: @0;
     NSArray *categories = project[@"categories"] ?: self.item[@"categories"];
-    NSString *category = categories.firstObject ?: @"Mod";
+    NSString *category = categories.firstObject ?: self.contentSingular.capitalizedString;
     self.statsLabel.text = [NSString stringWithFormat:@"↓ %@ downloads  •  ♡ %@ followers  •  %@",
         AmethystCompactNumber(downloads), AmethystCompactNumber(followers), AmethystReadableValue(category)];
-    [self.downloadButton setTitle:self.installed ? @"  REINSTALL" : @"  GET" forState:UIControlStateNormal];
+    if (!self.installing) {
+        [self.downloadButton setImage:[UIImage systemImageNamed:@"arrow.down.circle.fill"]
+            forState:UIControlStateNormal];
+        [self.downloadButton setTitle:self.installed ? @"  REINSTALL" : @"  GET"
+            forState:UIControlStateNormal];
+    }
 
     NSMutableArray<NSURL *> *artworkURLs = [NSMutableArray new];
     AmethystAppendArtworkURL(artworkURLs, project[@"icon_url"]);
@@ -307,7 +327,7 @@ static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 2; }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (section == 1) return 4;
+    if (section == 1) return self.isModContent ? 4 : 3;
     switch (self.tabs.selectedSegmentIndex) {
         case 1: return MAX([self.project[@"gallery"] count], 1);
         case 2: return MAX(MIN(self.versions.count, 20), 1);
@@ -318,12 +338,18 @@ static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     if (section == 1) return @"Compatibility";
-    return @[@"About This Mod", @"Gallery", @"Latest Changes", @"Available Versions"]
-        [self.tabs.selectedSegmentIndex];
+    if (self.tabs.selectedSegmentIndex == 0) {
+        return [NSString stringWithFormat:@"About This %@",
+            self.contentSingular.capitalizedString];
+    }
+    return @[@"Gallery", @"Latest Changes", @"Available Versions"]
+        [self.tabs.selectedSegmentIndex - 1];
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    if (section == 1) return @"Dependency installation can be changed before downloading. Disabling it may prevent the mod from launching.";
+    if (section == 1 && self.isModContent) {
+        return @"Dependency installation can be changed before downloading. Disabling it may prevent the mod from launching.";
+    }
     return nil;
 }
 
@@ -403,11 +429,14 @@ static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
 }
 
 - (UITableViewCell *)versionCellForRow:(NSInteger)row {
+    NSString *compatibility = self.isModContent
+        ? [NSString stringWithFormat:@"Nothing matches Minecraft %@ and %@.",
+            self.minecraftVersion, self.loader.capitalizedString]
+        : [NSString stringWithFormat:@"Nothing matches Minecraft %@.", self.minecraftVersion];
     if (self.versions.count == 0) return [self emptyCellWithTitle:
         self.versionsError ? @"Unable to load versions" : @"No compatible versions"
         detail:self.versionsError.localizedDescription ?:
-            [NSString stringWithFormat:@"Nothing matches Minecraft %@ and %@.",
-                self.minecraftVersion, self.loader.capitalizedString]];
+            compatibility];
     NSDictionary *version = self.versions[row];
     UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
     cell.textLabel.text = version[@"name"] ?: version[@"version_number"] ?: @"Version";
@@ -443,7 +472,8 @@ static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
             cell.imageView.image = [UIImage systemImageNamed:@"shippingbox"];
             cell.textLabel.text = @"Platforms";
             cell.detailTextLabel.text = loaders.count > 0
-                ? [self compactList:loaders fallback:self.loader] : self.loader.capitalizedString;
+                ? [self compactList:loaders fallback:self.loader]
+                : (self.loader.length > 0 ? self.loader.capitalizedString : self.contentSingular.capitalizedString);
             break;
         case 2:
             cell.imageView.image = [UIImage systemImageNamed:@"desktopcomputer"];
@@ -510,7 +540,10 @@ static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
     }
     if (self.versions.count == 0) {
         [self showMessageWithTitle:@"No compatible version"
-            message:@"This mod has no downloadable version for the selected Minecraft version and loader."];
+            message:self.isModContent
+                ? @"This mod has no downloadable version for the selected Minecraft version and loader."
+                : [NSString stringWithFormat:@"This %@ has no downloadable version for the selected Minecraft version.",
+                    self.contentSingular]];
         return;
     }
     [self requestInstallVersion:self.versions.firstObject];
@@ -530,20 +563,24 @@ static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
         project = merged;
     }
     [self.delegate modDetailViewController:self installVersion:version project:project
-        includeDependencies:self.dependencySwitch ? self.dependencySwitch.isOn : YES];
+        includeDependencies:self.isModContent &&
+            (self.dependencySwitch ? self.dependencySwitch.isOn : YES)];
 }
 
 - (void)setInstalling:(BOOL)installing {
     _installing = installing;
     self.downloadButton.enabled = !installing;
+    self.downloadButton.accessibilityLabel = installing ? @"Installing"
+        : (self.installed ? @"Reinstall" : @"Get");
     self.dependencySwitch.enabled = !installing;
-    self.downloadButton.imageView.hidden = installing;
-    self.downloadButton.titleLabel.hidden = installing;
-    if (installing) [self.downloadSpinner startAnimating];
+    if (installing) {
+        [self.downloadButton setImage:nil forState:UIControlStateNormal];
+        [self.downloadButton setTitle:@"" forState:UIControlStateNormal];
+        [self.downloadSpinner startAnimating];
+    }
     else {
         [self.downloadSpinner stopAnimating];
-        self.downloadButton.imageView.hidden = NO;
-        self.downloadButton.titleLabel.hidden = NO;
+        [self updateHero];
     }
 }
 
@@ -554,8 +591,10 @@ static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
     } else {
         self.installed = YES;
         [self updateHero];
-        [self showMessageWithTitle:@"Mod installed"
-            message:@"The selected mod version was added to this profile."];
+        [self showMessageWithTitle:[NSString stringWithFormat:@"%@ installed",
+                self.contentSingular.capitalizedString]
+            message:[NSString stringWithFormat:@"The selected %@ version was added to this profile.%@",
+                self.contentSingular, self.isModContent ? @"" : @" Enable it from Minecraft settings."]];
     }
 }
 
