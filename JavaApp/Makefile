@@ -14,23 +14,30 @@ JCFLAGS := -cp "$(subst $() $(),:,$(wildcard $(SOURCEDIR)/*/):$(wildcard libs/*/
 all: $(TARGETS)
 	
 # Sometimes the CI produces empty class file resulting in broken jar, so we check and abort here
-check_empty_classes:
+check_empty_classes: $(CLASSES)
 	@set -e
 	@echo "Checking for empty class files"
-	$(eval EMPTY_CLASSES := $(shell find $(OUTPUTDIR) -name '*.class' -size 0))
-	@if [ -n "$(EMPTY_CLASSES)" ]; then \
-		echo "Error: found empty class files in $@: $(EMPTY_CLASSES)"; \
+	@empty_classes="$$(find $(OUTPUTDIR) -name '*.class' -size 0 -print)"; \
+	if [ -n "$$empty_classes" ]; then \
+		echo "Error: found empty class files in $@: $$empty_classes"; \
 		exit 1; \
 	fi
 
-# Rules for building java class
-$(CLASSES): $(OUTPUTDIR)/%.class: $(SOURCEDIR)/%.java
+# Compile once into a shared staging tree. Running one javac process per source
+# in parallel made those processes truncate and overwrite the same dependency
+# classes, intermittently leaving zero-byte files in CI.
+$(OUTPUTDIR)/classes/.compiled: $(SOURCES)
+	@set -e
+	@mkdir -p $(dir $@)
+	@echo "Compiling Java sources"
+	@$(BOOTJDK)/javac $(JCFLAGS) -d $(OUTPUTDIR)/classes $(SOURCES)
+	@touch $@
+
+# Copy each source set's classes into the tree used to build its jar.
+$(CLASSES): $(OUTPUTDIR)/%.class: $(OUTPUTDIR)/classes/.compiled
 	@set -e
 	$(eval TARGET=$(word 2, $(subst /, ,$@)))
-	@mkdir -p $(OUTPUTDIR)/classes
 	@mkdir -p $(dir $@)
-	@echo "Compiling $<"
-	@$(BOOTJDK)/javac $(JCFLAGS) -d $(OUTPUTDIR)/classes $<
 	@cp $(@:$(OUTPUTDIR)/$(TARGET)/%.class=$(OUTPUTDIR)/classes/%*.class) $(dir $@)/
 
 $(OUTPUTDIR)/launcher.jar: $(CLASSES) check_empty_classes
@@ -62,4 +69,4 @@ clean:
 	rm -rf $(OUTPUTDIR)
 
 .SUFFIXES: .java
-.PHONY: all clean
+.PHONY: all clean check_empty_classes
