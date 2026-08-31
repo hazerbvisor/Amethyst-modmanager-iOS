@@ -1,12 +1,12 @@
-**All versions of iOS (14 and later), now work, including every version of iOS 26 and iOS 27 beta, with proper TXM logic!**
+App Store-style Mod Manager for Amethyst iOS
 
-**Mojang is moving the windowing and keyboard system from GLFW to SDL3, and I need help in order to make Amethyst use this. If anyone is able to assist, there is a post about it in Issues like always.**
+A redesigned Modrinth mod browser inspired by the iPad App Store. It provides a clean “Discover Mods” interface with Featured, Popular, and Updated sections. Each mod is displayed with its artwork, creator, description, download count, and compatibility information.
 
-**All the new versions of Minecraft work as of right now, however the newest snapshots don't. This is because of SDL3, which I am working on. The keyboard is fixed! It is currently recommended to use Zinc renderer (Mesa 25 via MoltenVK) for best performance, or LTW renderer if you are playing 1.21.1 and below. If you want to use Vulkan, launch the game with MobileGlues or Zinc and change your Preferred Graphics Api to Vulkan.**
+Users can search for compatible mods, view available versions, install mods with the GET button, and see which mods are already installed. The existing dependency installation, JAR downloading, profile compatibility filtering, and SHA-512 file verification remain supported.
 
-This is a build of AngelAuraAmethyst iOS which has been customized to be able to launch Minecraft 26.x.x. This includes the snapshots. Do note that this is completely unofficial. Don't bother the Amethyst devs if something breaks. Instead, post an issue here and i'll look into it. Huge shoutout to @Ynnyny and @DuyAnh662 once again for helping with code and rendering stuff under the hood. Keyboard is now working thanks to @T1k-T1k and @DuyAnh662. @T1k-T1k also made compiling possible. Huge thanks to both of them. This build bundles a custom lwjgl version and Java 25. It also does not include slimmed versions. Builds are only published in Releases and not in Actions. Builds in Actions are never intended to be used until they become releases. Most older Minecraft versions that use Java 21 will launch with this by selecting Java 25 as the Java version. All versions that use Java 8 work without any special configuration. Versions that use Java 17 do not currently work. Instead, you can install normal Amethyst alongside this version because of different bundle identifiers.
+Im planning to add more features and also redesign the ui (again)
 
-Compiling does work, and is supported, but is still not recommended. The build process now automatically uses the custom lwjgl.jar from the project root. The lwjgl.jar at the root is a modified version of lwjgl 3.3.3 that provides compatibility with lwjgl 3.4.1 API calls.
+I made this because it was so annoying to download mods and move them to the folders
 
 Thanks to vibecodest for their source code!
 ## Third party components and their licenses
