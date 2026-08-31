@@ -85,7 +85,7 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
 }
 
 - (void)actionImportJar {
-    UTType *jarType = [UTType typeWithFilenameExtension:@"jar"] ?: [UTType data];
+    UTType *jarType = [UTType typeWithMIMEType:@"application/java-archive"];
     UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
         initForOpeningContentTypes:@[jarType] asCopy:YES];
     picker.delegate = self;
@@ -550,28 +550,36 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
 
 - (BOOL)installDownloadedFile:(NSString *)downloadPath filename:(NSString *)filename
     version:(NSDictionary *)version error:(NSError **)error {
-    NSError *localError = nil;
-    NSError **outError = error ?: &localError;
+    NSError *operationError = nil;
     [NSFileManager.defaultManager createDirectoryAtPath:self.modsDirectory
-        withIntermediateDirectories:YES attributes:nil error:outError];
-    if (*outError) return NO;
+        withIntermediateDirectories:YES attributes:nil error:&operationError];
+    if (operationError) {
+        if (error) *error = operationError;
+        return NO;
+    }
 
     NSString *stagedPath = [self.modsDirectory stringByAppendingPathComponent:
         [NSString stringWithFormat:@".amethyst-download-%@", NSUUID.UUID.UUIDString]];
-    [NSFileManager.defaultManager moveItemAtPath:downloadPath toPath:stagedPath error:outError];
-    if (*outError) return NO;
+    [NSFileManager.defaultManager moveItemAtPath:downloadPath toPath:stagedPath error:&operationError];
+    if (operationError) {
+        if (error) *error = operationError;
+        return NO;
+    }
 
     @synchronized (self) {
         NSString *destination = [self.modsDirectory stringByAppendingPathComponent:filename];
         if ([NSFileManager.defaultManager fileExistsAtPath:destination]) {
             [NSFileManager.defaultManager replaceItemAtURL:[NSURL fileURLWithPath:destination]
                 withItemAtURL:[NSURL fileURLWithPath:stagedPath] backupItemName:nil
-                options:0 resultingItemURL:nil error:outError];
+                options:0 resultingItemURL:nil error:&operationError];
         } else {
-            [NSFileManager.defaultManager moveItemAtPath:stagedPath toPath:destination error:outError];
+            [NSFileManager.defaultManager moveItemAtPath:stagedPath toPath:destination error:&operationError];
         }
         [NSFileManager.defaultManager removeItemAtPath:stagedPath error:nil];
-        if (*outError) return NO;
+        if (operationError) {
+            if (error) *error = operationError;
+            return NO;
+        }
 
         [NSFileManager.defaultManager removeItemAtPath:
             [destination stringByAppendingString:AmethystDisabledModSuffix] error:nil];
