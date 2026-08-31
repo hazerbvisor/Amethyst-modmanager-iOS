@@ -38,6 +38,23 @@ static NSString *AmethystReadableValue(NSString *value) {
     return [[value stringByReplacingOccurrencesOfString:@"_" withString:@" "] capitalizedString];
 }
 
+static NSURL *AmethystDetailArtworkURL(id value) {
+    if (![value isKindOfClass:NSString.class] || [value length] == 0) return nil;
+    NSURL *url = [NSURL URLWithString:value];
+    if (!url) {
+        NSString *encoded = [value stringByAddingPercentEncodingWithAllowedCharacters:
+            NSCharacterSet.URLQueryAllowedCharacterSet];
+        url = [NSURL URLWithString:encoded];
+    }
+    if (![@[@"http", @"https"] containsObject:url.scheme.lowercaseString]) return nil;
+    return url;
+}
+
+static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
+    NSURL *url = AmethystDetailArtworkURL(value);
+    if (url && ![urls containsObject:url]) [urls addObject:url];
+}
+
 @interface ModrinthModDetailViewController ()
 @property(nonatomic, strong) NSDictionary *item;
 @property(nonatomic, strong) NSDictionary *project;
@@ -45,8 +62,10 @@ static NSString *AmethystReadableValue(NSString *value) {
 @property(nonatomic, copy) NSString *minecraftVersion;
 @property(nonatomic, copy) NSString *loader;
 @property(nonatomic, strong) ModrinthAPI *api;
+@property(nonatomic, strong) NSError *versionsError;
 @property(nonatomic) BOOL installed;
 @property(nonatomic) BOOL installing;
+@property(nonatomic, copy) NSString *artworkLoadToken;
 
 @property(nonatomic, strong) UIImageView *iconView;
 @property(nonatomic, strong) UILabel *nameLabel;
@@ -197,6 +216,33 @@ static NSString *AmethystReadableValue(NSString *value) {
     [self updateHero];
 }
 
+- (void)loadArtworkURLs:(NSArray<NSURL *> *)urls
+    atIndex:(NSUInteger)index
+    token:(NSString *)token
+    placeholder:(UIImage *)placeholder {
+    if (index >= urls.count || ![self.artworkLoadToken isEqualToString:token]) return;
+    NSURLRequest *request = [NSURLRequest requestWithURL:urls[index]
+        cachePolicy:NSURLRequestReturnCacheDataElseLoad timeoutInterval:30.0];
+    __weak typeof(self) weakSelf = self;
+    [self.iconView setImageWithURLRequest:request placeholderImage:placeholder
+        success:^(NSURLRequest *request, NSHTTPURLResponse *response, UIImage *image) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if ([strongSelf.artworkLoadToken isEqualToString:token]) strongSelf.iconView.image = image;
+    } failure:^(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (![strongSelf.artworkLoadToken isEqualToString:token]) return;
+        [strongSelf loadArtworkURLs:urls atIndex:index + 1 token:token placeholder:placeholder];
+    }];
+}
+
+- (void)loadArtworkURLs:(NSArray<NSURL *> *)urls {
+    [self.iconView cancelImageDownloadTask];
+    UIImage *placeholder = [UIImage imageNamed:@"DefaultProfile"];
+    self.iconView.image = placeholder;
+    self.artworkLoadToken = NSUUID.UUID.UUIDString;
+    [self loadArtworkURLs:urls atIndex:0 token:self.artworkLoadToken placeholder:placeholder];
+}
+
 - (void)updateHero {
     NSDictionary *project = self.project ?: self.item;
     self.nameLabel.text = project[@"title"] ?: self.item[@"title"];
@@ -209,13 +255,21 @@ static NSString *AmethystReadableValue(NSString *value) {
         AmethystCompactNumber(downloads), AmethystCompactNumber(followers), AmethystReadableValue(category)];
     [self.downloadButton setTitle:self.installed ? @"  REINSTALL" : @"  GET" forState:UIControlStateNormal];
 
-    NSString *iconString = project[@"icon_url"];
-    if (![iconString isKindOfClass:NSString.class]) iconString = self.item[@"imageUrl"];
-    if (![iconString isKindOfClass:NSString.class]) iconString = nil;
-    NSURL *iconURL = [NSURL URLWithString:iconString];
-    UIImage *placeholder = [UIImage imageNamed:@"DefaultProfile"];
-    if (iconURL) [self.iconView setImageWithURL:iconURL placeholderImage:placeholder];
-    else self.iconView.image = placeholder;
+    NSMutableArray<NSURL *> *artworkURLs = [NSMutableArray new];
+    AmethystAppendArtworkURL(artworkURLs, project[@"icon_url"]);
+    AmethystAppendArtworkURL(artworkURLs, project[@"raw_icon_url"]);
+    AmethystAppendArtworkURL(artworkURLs, self.item[@"imageUrl"]);
+    NSArray *gallery = [project[@"gallery"] isKindOfClass:NSArray.class] ? project[@"gallery"] : @[];
+    for (id value in gallery) {
+        if ([value isKindOfClass:NSDictionary.class] && [value[@"featured"] boolValue]) {
+            AmethystAppendArtworkURL(artworkURLs, value[@"url"]);
+        }
+    }
+    for (id value in gallery) {
+        if ([value isKindOfClass:NSDictionary.class]) AmethystAppendArtworkURL(artworkURLs, value[@"url"]);
+    }
+    AmethystAppendArtworkURL(artworkURLs, self.item[@"fallbackImageUrl"]);
+    [self loadArtworkURLs:artworkURLs];
 }
 
 - (void)loadProjectDetails {
@@ -224,24 +278,23 @@ static NSString *AmethystReadableValue(NSString *value) {
     [spinner startAnimating];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:spinner];
     NSString *projectId = self.item[@"id"];
-    NSDictionary *params = @{
-        @"game_versions": [NSString stringWithFormat:@"[\"%@\"]", self.minecraftVersion],
-        @"loaders": [NSString stringWithFormat:@"[\"%@\"]", self.loader],
-        @"include_changelog": @YES
-    };
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSDictionary *project = [self.api getEndpoint:[NSString stringWithFormat:@"project/%@", projectId]
             params:nil];
-        NSArray *versions = [self.api getEndpoint:[NSString stringWithFormat:@"project/%@/version", projectId]
-            params:params];
+        NSError *projectError = project ? nil : self.api.lastError;
+        NSArray *versions = [self.api compatibleVersionsForProject:projectId
+            minecraftVersion:self.minecraftVersion loader:self.loader includeChangelog:YES];
+        NSError *versionError = versions ? nil : self.api.lastError;
         dispatch_async(dispatch_get_main_queue(), ^{
             self.navigationItem.rightBarButtonItem = nil;
             if (project) self.project = project;
-            if ([versions isKindOfClass:NSArray.class]) self.versions = versions;
+            if (versions) self.versions = versions;
+            self.versionsError = versionError;
             [self updateHero];
             [self.tableView reloadData];
             if (!project && !versions) [self showMessageWithTitle:@"Unable to load details"
-                message:self.api.lastError.localizedDescription ?: @"Modrinth did not return this project."];
+                message:versionError.localizedDescription ?: projectError.localizedDescription ?:
+                    @"Modrinth did not return this project."];
         });
     });
 }
@@ -319,7 +372,8 @@ static NSString *AmethystReadableValue(NSString *value) {
     imageView.layer.cornerRadius = 18.0;
     imageView.layer.cornerCurve = kCACornerCurveContinuous;
     imageView.backgroundColor = UIColor.tertiarySystemFillColor;
-    [imageView setImageWithURL:[NSURL URLWithString:image[@"url"]] placeholderImage:nil];
+    NSURL *galleryURL = AmethystDetailArtworkURL(image[@"url"]);
+    if (galleryURL) [imageView setImageWithURL:galleryURL placeholderImage:nil];
     [cell.contentView addSubview:imageView];
     [NSLayoutConstraint activateConstraints:@[
         [imageView.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor constant:6.0],
@@ -332,8 +386,10 @@ static NSString *AmethystReadableValue(NSString *value) {
 }
 
 - (UITableViewCell *)changelogCellForRow:(NSInteger)row {
-    if (self.versions.count == 0) return [self emptyCellWithTitle:@"No changelog available"
-        detail:@"No compatible versions were returned for this profile."];
+    if (self.versions.count == 0) return [self emptyCellWithTitle:
+        self.versionsError ? @"Unable to load changelog" : @"No changelog available"
+        detail:self.versionsError.localizedDescription ?:
+            @"No compatible versions were returned for this profile."];
     NSDictionary *version = self.versions[row];
     UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
@@ -347,9 +403,11 @@ static NSString *AmethystReadableValue(NSString *value) {
 }
 
 - (UITableViewCell *)versionCellForRow:(NSInteger)row {
-    if (self.versions.count == 0) return [self emptyCellWithTitle:@"No compatible versions"
-        detail:[NSString stringWithFormat:@"Nothing matches Minecraft %@ and %@.",
-            self.minecraftVersion, self.loader.capitalizedString]];
+    if (self.versions.count == 0) return [self emptyCellWithTitle:
+        self.versionsError ? @"Unable to load versions" : @"No compatible versions"
+        detail:self.versionsError.localizedDescription ?:
+            [NSString stringWithFormat:@"Nothing matches Minecraft %@ and %@.",
+                self.minecraftVersion, self.loader.capitalizedString]];
     NSDictionary *version = self.versions[row];
     UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:nil];
     cell.textLabel.text = version[@"name"] ?: version[@"version_number"] ?: @"Version";
@@ -444,6 +502,12 @@ static NSString *AmethystReadableValue(NSString *value) {
 }
 
 - (void)downloadTapped {
+    if (self.versionsError) {
+        [self showMessageWithTitle:@"Unable to load versions"
+            message:self.versionsError.localizedDescription ?:
+                @"Modrinth did not return this project's versions. Please try again."];
+        return;
+    }
     if (self.versions.count == 0) {
         [self showMessageWithTitle:@"No compatible version"
             message:@"This mod has no downloadable version for the selected Minecraft version and loader."];

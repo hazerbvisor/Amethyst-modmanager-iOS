@@ -12,6 +12,18 @@
 
 static NSString *const AmethystDisabledModSuffix = @".disabled";
 
+static NSURL *AmethystArtworkURL(id value) {
+    if (![value isKindOfClass:NSString.class] || [value length] == 0) return nil;
+    NSURL *url = [NSURL URLWithString:value];
+    if (!url) {
+        NSString *encoded = [value stringByAddingPercentEncodingWithAllowedCharacters:
+            NSCharacterSet.URLQueryAllowedCharacterSet];
+        url = [NSURL URLWithString:encoded];
+    }
+    if (![@[@"http", @"https"] containsObject:url.scheme.lowercaseString]) return nil;
+    return url;
+}
+
 @interface ModrinthModBrowserViewController : UITableViewController<UISearchResultsUpdating>
 - (instancetype)initWithProfile:(NSDictionary *)profile modsDirectory:(NSString *)modsDirectory;
 @end
@@ -231,6 +243,7 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
 @property(nonatomic, strong) UILabel *metadataLabel;
 @property(nonatomic, strong) UIButton *getButton;
 @property(nonatomic, strong) UIActivityIndicatorView *activityIndicator;
+@property(nonatomic, copy) NSString *representedProjectId;
 - (void)configureWithItem:(NSDictionary *)item installed:(BOOL)installed metadata:(NSString *)metadata;
 - (void)setLoading:(BOOL)loading;
 @end
@@ -335,9 +348,29 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
 
 - (void)prepareForReuse {
     [super prepareForReuse];
+    self.representedProjectId = nil;
     [self.modIconView cancelImageDownloadTask];
     self.modIconView.image = [UIImage imageNamed:@"DefaultProfile"];
     [self setLoading:NO];
+}
+
+- (void)loadArtworkURLs:(NSArray<NSURL *> *)urls
+    atIndex:(NSUInteger)index
+    projectId:(NSString *)projectId
+    placeholder:(UIImage *)placeholder {
+    if (index >= urls.count || ![self.representedProjectId isEqualToString:projectId]) return;
+    NSURLRequest *request = [NSURLRequest requestWithURL:urls[index]
+        cachePolicy:NSURLRequestReturnCacheDataElseLoad timeoutInterval:30.0];
+    __weak typeof(self) weakSelf = self;
+    [self.modIconView setImageWithURLRequest:request placeholderImage:placeholder
+        success:^(NSURLRequest *request, NSHTTPURLResponse *response, UIImage *image) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if ([strongSelf.representedProjectId isEqualToString:projectId]) strongSelf.modIconView.image = image;
+    } failure:^(NSURLRequest *request, NSHTTPURLResponse *response, NSError *error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (![strongSelf.representedProjectId isEqualToString:projectId]) return;
+        [strongSelf loadArtworkURLs:urls atIndex:index + 1 projectId:projectId placeholder:placeholder];
+    }];
 }
 
 - (void)configureWithItem:(NSDictionary *)item installed:(BOOL)installed metadata:(NSString *)metadata {
@@ -357,8 +390,15 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
 
     UIImage *placeholder = [UIImage imageNamed:@"DefaultProfile"];
     self.modIconView.image = placeholder;
-    NSURL *imageURL = [NSURL URLWithString:item[@"imageUrl"]];
-    if (imageURL) [self.modIconView setImageWithURL:imageURL placeholderImage:placeholder];
+    self.representedProjectId = [item[@"id"] isKindOfClass:NSString.class]
+        ? item[@"id"] : NSUUID.UUID.UUIDString;
+    NSMutableArray<NSURL *> *artworkURLs = [NSMutableArray new];
+    NSURL *iconURL = AmethystArtworkURL(item[@"imageUrl"]);
+    NSURL *fallbackURL = AmethystArtworkURL(item[@"fallbackImageUrl"]);
+    if (iconURL) [artworkURLs addObject:iconURL];
+    if (fallbackURL && ![fallbackURL isEqual:iconURL]) [artworkURLs addObject:fallbackURL];
+    [self loadArtworkURLs:artworkURLs atIndex:0 projectId:self.representedProjectId
+        placeholder:placeholder];
 }
 
 - (void)setLoading:(BOOL)loading {
@@ -640,16 +680,18 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
     if ([cell isKindOfClass:AmethystModStoreCell.class]) {
         [(AmethystModStoreCell *)cell setLoading:YES];
     }
-    NSDictionary *params = @{
-        @"game_versions": [NSString stringWithFormat:@"[\"%@\"]", self.minecraftVersion],
-        @"loaders": [NSString stringWithFormat:@"[\"%@\"]", self.loader]
-    };
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSArray *versions = [self.api getEndpoint:[NSString stringWithFormat:@"project/%@/version", item[@"id"]]
-            params:params];
+        NSArray *versions = [self.api compatibleVersionsForProject:item[@"id"]
+            minecraftVersion:self.minecraftVersion loader:self.loader includeChangelog:NO];
+        NSError *versionError = versions ? nil : self.api.lastError;
         dispatch_async(dispatch_get_main_queue(), ^{
             if ([cell isKindOfClass:AmethystModStoreCell.class]) {
                 [(AmethystModStoreCell *)cell setLoading:NO];
+            }
+            if (!versions) {
+                showDialog(@"Unable to load versions", versionError.localizedDescription ?:
+                    @"Modrinth did not return this project's versions. Please try again.");
+                return;
             }
             if (versions.count == 0) {
                 showDialog(@"No compatible version", @"This project has no downloadable version for the selected Minecraft version and loader.");
@@ -817,12 +859,8 @@ static NSString *const AmethystDisabledModSuffix = @".disabled";
         if ([dependency[@"version_id"] isKindOfClass:NSString.class]) {
             resolved = [self.api getEndpoint:[NSString stringWithFormat:@"version/%@", dependency[@"version_id"]] params:nil];
         } else if ([dependency[@"project_id"] isKindOfClass:NSString.class]) {
-            NSDictionary *params = @{
-                @"game_versions": [NSString stringWithFormat:@"[\"%@\"]", self.minecraftVersion],
-                @"loaders": [NSString stringWithFormat:@"[\"%@\"]", self.loader]
-            };
-            NSArray *versions = [self.api getEndpoint:
-                [NSString stringWithFormat:@"project/%@/version", dependency[@"project_id"]] params:params];
+            NSArray *versions = [self.api compatibleVersionsForProject:dependency[@"project_id"]
+                minecraftVersion:self.minecraftVersion loader:self.loader includeChangelog:NO];
             resolved = versions.firstObject;
         }
         completion(resolved, resolved ? nil : self.api.lastError);
