@@ -32,7 +32,8 @@
     dispatch_group_enter(group);
     NSString *url = [self.baseURL stringByAppendingPathComponent:endpoint];
     AFHTTPSessionManager *manager = [AFHTTPSessionManager manager];
-    [manager GET:url parameters:params headers:nil progress:nil
+    NSDictionary *headers = @{@"User-Agent": @"hazerbvisor/Amethyst-iOS-25 (iOS mod manager)"};
+    [manager GET:url parameters:params headers:headers progress:nil
     success:^(NSURLSessionTask *task, id obj) {
         result = obj;
         dispatch_group_leave(group);
