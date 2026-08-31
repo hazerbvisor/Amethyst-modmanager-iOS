@@ -7,6 +7,7 @@ Users can search for compatible mods, view available versions, install mods with
 Im planning to add more features and also redesign the ui (again)
 
 I made this because it was so annoying to download mods and move them to the folders
+(tested on ipad air 11-inch [M4])
 
 Thanks to vibecodest for their source code!
 ## Third party components and their licenses
