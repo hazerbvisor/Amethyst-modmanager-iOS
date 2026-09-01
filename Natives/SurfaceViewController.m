@@ -673,25 +673,30 @@ static GameSurfaceView* pojavWindow;
 }
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    NSMutableSet<UIPress *> *unhandledPresses = [NSMutableSet set];
     for (UIPress *press in presses) {
-        if (press.key != nil) {
-            [KeyboardInput sendKeyEvent:press.key down:YES];
+        if (press.key == nil || ![KeyboardInput sendKeyEvent:press.key down:YES]) {
+            [unhandledPresses addObject:press];
         }
     }
-    // Always call super so that inputTextField (UITextInput) can receive
-    // key events for text input (e.g., Minecraft chat).
-    [super pressesBegan:presses withEvent:event];
+    // Passing an already-handled hardware key to UIKit also invokes
+    // TrackedTextField's text-input path and inserts the character again.
+    // Preserve UIKit handling only for presses the game bridge did not use.
+    if (unhandledPresses.count > 0) {
+        [super pressesBegan:unhandledPresses withEvent:event];
+    }
 }
 
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
+    NSMutableSet<UIPress *> *unhandledPresses = [NSMutableSet set];
     for (UIPress *press in presses) {
-        if (press.key != nil) {
-            [KeyboardInput sendKeyEvent:press.key down:NO];
+        if (press.key == nil || ![KeyboardInput sendKeyEvent:press.key down:NO]) {
+            [unhandledPresses addObject:press];
         }
     }
-    // Always call super so that inputTextField (UITextInput) can receive
-    // key-up events properly.
-    [super pressesEnded:presses withEvent:event];
+    if (unhandledPresses.count > 0) {
+        [super pressesEnded:unhandledPresses withEvent:event];
+    }
 }
 
 - (BOOL)prefersPointerLocked {

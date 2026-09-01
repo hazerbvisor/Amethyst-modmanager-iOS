@@ -118,8 +118,10 @@ int keycodeTable[UIKeyboardHIDUsageKeyboardRightGUI+1];
     if (isDown && key.characters.length > 0 && key.characters.length < 11) {
         for (int i = 0; i < key.characters.length; i++) {
             int keychar = [key.characters characterAtIndex:i];
+            // CharMods already falls back to the regular Char callback when
+            // the game has not registered a CharMods handler. Sending both
+            // callbacks inserts every hardware-keyboard character twice.
             CallbackBridge_nativeSendCharMods(keychar, modifiers);
-            CallbackBridge_nativeSendChar(keychar);
         }
         sentChars = YES;
     }
