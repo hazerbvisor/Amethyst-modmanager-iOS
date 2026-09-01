@@ -29,7 +29,6 @@ add_subdirectory("${KRYPTON_SOURCE_DIR}/3rdparty/glslang" glslang EXCLUDE_FROM_A
 add_subdirectory("${KRYPTON_SOURCE_DIR}/3rdparty/SPIRV-Cross" spirv-cross EXCLUDE_FROM_ALL)
 
 set(KRYPTON_SOURCES
-  src/gl/string_utils.c
   src/gl/cJSON.c
   src/gl/config.c
   src/gl/arbconverter.c
@@ -109,6 +108,46 @@ set(KRYPTON_SOURCES
   src/gl/getter.cpp
 )
 list(TRANSFORM KRYPTON_SOURCES PREPEND "${KRYPTON_SOURCE_DIR}/")
+
+# Mach-O does not support Clang's ELF-style alias attribute.  NG-GL4ES uses
+# aliases only for the legacy shader converter names at the end of this file,
+# so generate an Apple-compatible copy containing ordinary forwarding
+# functions.  This deliberately leaves the external submodule unmodified.
+set(KRYPTON_STRING_UTILS_SOURCE "${KRYPTON_SOURCE_DIR}/src/gl/string_utils.c")
+if(APPLE)
+  file(READ "${KRYPTON_STRING_UTILS_SOURCE}" KRYPTON_STRING_UTILS_CONTENT)
+  string(FIND "${KRYPTON_STRING_UTILS_CONTENT}"
+    "const char* FindString(const char* pBuffer, const char* S) __attribute__"
+    KRYPTON_ALIAS_BLOCK_OFFSET)
+  if(KRYPTON_ALIAS_BLOCK_OFFSET EQUAL -1)
+    message(FATAL_ERROR "Could not locate the NG-GL4ES string utility alias block")
+  endif()
+  string(SUBSTRING "${KRYPTON_STRING_UTILS_CONTENT}" 0
+    ${KRYPTON_ALIAS_BLOCK_OFFSET} KRYPTON_STRING_UTILS_PREFIX)
+  set(KRYPTON_STRING_UTILS_COMPAT "${CMAKE_CURRENT_BINARY_DIR}/string_utils_apple.c")
+  file(WRITE "${KRYPTON_STRING_UTILS_COMPAT}" "${KRYPTON_STRING_UTILS_PREFIX}"
+"const char* FindString(const char* pBuffer, const char* S) { return gl4es_find_string(pBuffer, S); }\n"
+"char* FindStringNC(char* pBuffer, const char* S) { return gl4es_find_string_nc(pBuffer, S); }\n"
+"int CountString(const char* pBuffer, const char* S) { return gl4es_count_string(pBuffer, S); }\n"
+"char* ResizeIfNeeded(char* pBuffer, int *size, int addsize) { return gl4es_resize_if_needed(pBuffer, size, addsize); }\n"
+"char* InplaceReplace(char* pBuffer, int* size, const char* S, const char* D) { return gl4es_inplace_replace(pBuffer, size, S, D); }\n"
+"char* Append(char* pBuffer, int* size, const char* S) { return gl4es_append(pBuffer, size, S); }\n"
+"char* InplaceInsert(char* pBuffer, const char* S, char* master, int* size) { return gl4es_inplace_insert(pBuffer, S, master, size); }\n"
+"char* GetLine(char* pBuffer, int num) { return gl4es_getline(pBuffer, num); }\n"
+"int CountLine(const char* pBuffer) { return gl4es_countline(pBuffer); }\n"
+"int GetLineFor(const char* pBuffer, const char* S) { return gl4es_getline_for(pBuffer, S); }\n"
+"char* StrNext(char *pBuffer, const char* S) { return gl4es_str_next(pBuffer, S); }\n"
+"char* NextStr(char* pBuffer) { return gl4es_next_str(pBuffer); }\n"
+"char* PrevStr(char* Str, char* pBuffer) { return gl4es_prev_str(Str, pBuffer); }\n"
+"char* NextBlank(char* pBuffer) { return gl4es_next_blank(pBuffer); }\n"
+"char* NextLine(char* pBuffer) { return gl4es_next_line(pBuffer); }\n"
+"const char* GetNextStr(char* pBuffer) { return gl4es_get_next_str(pBuffer); }\n"
+"int CountStringSimple(char* pBuffer, const char* S) { return gl4es_countstring_simple(pBuffer, S); }\n"
+"char* InplaceReplaceSimple(char* pBuffer, int* size, const char* S, const char* D) { return gl4es_inplace_replace_simple(pBuffer, size, S, D); }\n")
+  list(APPEND KRYPTON_SOURCES "${KRYPTON_STRING_UTILS_COMPAT}")
+else()
+  list(APPEND KRYPTON_SOURCES "${KRYPTON_STRING_UTILS_SOURCE}")
+endif()
 
 add_library(krypton SHARED ${KRYPTON_SOURCES})
 target_include_directories(krypton PRIVATE "${KRYPTON_SOURCE_DIR}/include")
