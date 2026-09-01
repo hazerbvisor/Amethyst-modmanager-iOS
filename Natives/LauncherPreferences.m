@@ -143,7 +143,6 @@ NSArray* getRendererKeys(BOOL containsDefault) {
         @ RENDERER_NAME_MTL_ANGLE,
         @ RENDERER_NAME_MOBILEGLUES,
         @ RENDERER_NAME_LTW,
-        @ RENDERER_NAME_KRYPTON,
         @ RENDERER_NAME_VK_ZINK,
         @ RENDERER_NAME_VULKAN
     ].mutableCopy;
@@ -166,7 +165,6 @@ NSArray* getRendererNames(BOOL containsDefault) {
         localize(@"preference.title.renderer.debug.angle", nil),
         localize(@"preference.title.renderer.debug.mg", nil),
         localize(@"preference.title.renderer.debug.ltw", nil),
-        localize(@"preference.title.renderer.debug.krypton", nil),
         localize(@"preference.title.renderer.debug.zink", nil),
         localize(@"preference.title.renderer.debug.vulkan", nil)
     };

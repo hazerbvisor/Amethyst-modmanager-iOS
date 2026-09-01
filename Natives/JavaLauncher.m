@@ -76,28 +76,6 @@ void init_loadCustomEnv() {
     }
 }
 
-static void init_loadKryptonConfig() {
-    NSString *frameworks = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"Frameworks"];
-    NSString *gles = [frameworks stringByAppendingPathComponent:@"libGLESv2.framework/libGLESv2"];
-    NSString *egl = [frameworks stringByAppendingPathComponent:@"libEGL.framework/libEGL"];
-    NSString *home = getenv("POJAV_HOME")
-        ? [NSString stringWithUTF8String:getenv("POJAV_HOME")] : NSHomeDirectory();
-    NSString *kryptonDirectory = [home stringByAppendingPathComponent:@"Krypton"];
-    [NSFileManager.defaultManager createDirectoryAtPath:kryptonDirectory
-        withIntermediateDirectories:YES attributes:nil error:nil];
-
-    // Keep user-provided advanced overrides, while providing safe iOS defaults.
-    if (!getenv("NGG_DIR_PATH")) setenv("NGG_DIR_PATH", kryptonDirectory.fileSystemRepresentation, 1);
-    if (!getenv("LIBGL_ES")) setenv("LIBGL_ES", "3", 1);
-    if (!getenv("LIBGL_GL")) setenv("LIBGL_GL", "31", 1);
-    if (!getenv("LIBGL_GLES")) setenv("LIBGL_GLES", gles.fileSystemRepresentation, 1);
-    if (!getenv("LIBGL_EGL")) setenv("LIBGL_EGL", egl.fileSystemRepresentation, 1);
-    if (!getenv("LIBGL_USEVBO")) setenv("LIBGL_USEVBO", "1", 1);
-    if (!getenv("LIBGL_NOBANNER")) setenv("LIBGL_NOBANNER", "0", 1);
-
-    NSLog(@"[Krypton] OpenGL 3.1 wrapper enabled with ANGLE/Metal backend");
-}
-
 void init_loadMobileGluesConfig() {
     NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
     BOOL usesMobileGlues = [renderer isEqualToString:@ RENDERER_NAME_MOBILEGLUES] ||
@@ -265,13 +243,6 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
         NSLog(@"[JavaLauncher] RENDERER is set to %@\n", renderer);
         setenv("AMETHYST_RENDERER", renderer.UTF8String, 1);
-
-        if ([renderer isEqualToString:@ RENDERER_NAME_KRYPTON]) {
-            init_loadKryptonConfig();
-            if (requiredJavaVersion >= 25) {
-                NSLog(@"[Krypton] Warning: Java 25-era Minecraft Vulkan versions are not a supported Krypton target");
-            }
-        }
 
         // Apply Zink-specific environment variables if Zink renderer is selected
         if ([renderer hasPrefix:@"libOSMesa"]) {

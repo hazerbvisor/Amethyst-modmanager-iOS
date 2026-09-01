@@ -1,5 +1,2 @@
 
 
-[submodule "Natives/external/NG-GL4ES"]
-	path = Natives/external/NG-GL4ES
-	url = https://github.com/hazerbvisor/NG-GL4ES.git
