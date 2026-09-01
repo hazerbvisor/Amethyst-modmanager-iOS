@@ -3,6 +3,7 @@
 #import "LauncherPrefGameDirViewController.h"
 #import "NSFileManager+NRFileManager.h"
 #import "PLProfiles.h"
+#import "installer/LiquidGlassCompat.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 
@@ -23,6 +24,7 @@
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
     self.tableView.sectionFooterHeight = 50;
+    AmethystStyleTableView(self.tableView);
 
     NSString *path = [NSString stringWithFormat:@"%s/instances", getenv("POJAV_HOME")];
 
@@ -93,8 +95,17 @@
     } else {
         cell.accessoryType = UITableViewCellAccessoryNone;
     }
-    
+    view.backgroundColor = UIColor.tertiarySystemFillColor;
+    view.layer.cornerRadius = 10.0;
+    view.layer.cornerCurve = kCACornerCurveContinuous;
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    AmethystStyleCell(cell);
     return cell;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateCellEntrance(cell, indexPath);
 }
 
 - (UIView *)tableView:(UITableView *)tableView 
@@ -107,12 +118,16 @@ viewForFooterInSection:(NSInteger)section
     view.delegate = self;
     view.placeholder = localize(@"preference.multidir.add_directory", nil);
     view.returnKeyType = UIReturnKeyDone;
+    view.backgroundColor = UIColor.tertiarySystemFillColor;
+    view.layer.cornerRadius = 12.0;
+    view.layer.cornerCurve = kCACornerCurveContinuous;
     return view;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateSelection([tableView cellForRowAtIndexPath:indexPath]);
     [self changeSelectionTo:self.array[indexPath.row]];
-    [tableView deselectRowAtIndexPath:indexPath animated:NO];
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
     for (int i = 0; i < self.array.count; i++) {
         UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:i inSection:0]];
         if (i == indexPath.row) {

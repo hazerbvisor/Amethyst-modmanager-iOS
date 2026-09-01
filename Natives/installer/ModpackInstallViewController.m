@@ -4,6 +4,7 @@
 #import "UIKit+AFNetworking.h"
 #import "UIKit+hook.h"
 #import "WFWorkflowProgressView.h"
+#import "installer/LiquidGlassCompat.h"
 #import "modpack/ModrinthAPI.h"
 #import "config.h"
 #import "ios_uikit_bridge.h"
@@ -26,6 +27,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    AmethystStyleTableView(self.tableView);
 
     //NSString *curseforgeAPIKey = CONFIG_CURSEFORGE_API_KEY;
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
@@ -129,6 +131,10 @@
     NSDictionary *item = self.list[indexPath.row];
     cell.textLabel.text = item[@"title"];
     cell.detailTextLabel.text = item[@"description"];
+    cell.textLabel.font = [UIFont systemFontOfSize:16.5 weight:UIFontWeightSemibold];
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    cell.imageView.layer.cornerRadius = 12.0;
+    cell.imageView.layer.cornerCurve = kCACornerCurveContinuous;
     UIImage *fallbackImage = [UIImage imageNamed:@"DefaultProfile"];
     [cell.imageView setImageWithURL:[NSURL URLWithString:item[@"imageUrl"]] placeholderImage:fallbackImage];
 
@@ -136,7 +142,13 @@
         [self loadSearchResultsWithPrevList:YES];
     }
 
+    AmethystStyleCell(cell);
     return cell;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateCellEntrance(cell, indexPath);
 }
 
 - (void)showDetails:(NSDictionary *)details atIndexPath:(NSIndexPath *)indexPath {
@@ -168,6 +180,7 @@
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateSelection([tableView cellForRowAtIndexPath:indexPath]);
     NSDictionary *item = self.list[indexPath.row];
     if ([item[@"versionDetailsLoaded"] boolValue]) {
         [self showDetails:item atIndexPath:indexPath];

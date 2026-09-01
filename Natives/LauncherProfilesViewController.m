@@ -7,6 +7,7 @@
 #import "LauncherProfilesViewController.h"
 //#import "NSFileManager+NRFileManager.h"
 #import "PLProfiles.h"
+#import "installer/LiquidGlassCompat.h"
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
 #import "UIKit+AFNetworking.h"
@@ -26,6 +27,7 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
 @interface LauncherProfilesViewController () //<UIContextMenuInteractionDelegate>
 
 @property(nonatomic) UIBarButtonItem *createButtonItem;
+@property(nonatomic) UILabel *profileCountLabel;
 @end
 
 @implementation LauncherProfilesViewController
@@ -38,6 +40,63 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
 
 - (NSString *)imageName {
     return @"MenuProfiles";
+}
+
+- (void)buildProfileHeader {
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0,
+        self.tableView.bounds.size.width, 154.0)];
+    UIVisualEffectView *glass = AmethystCreateGlassView(26.0, NO,
+        [UIColor.systemPurpleColor colorWithAlphaComponent:0.30]);
+    glass.translatesAutoresizingMaskIntoConstraints = NO;
+    [header addSubview:glass];
+
+    UIImageView *symbol = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:
+        @"square.stack.3d.up.fill"]];
+    symbol.translatesAutoresizingMaskIntoConstraints = NO;
+    symbol.contentMode = UIViewContentModeScaleAspectFit;
+    symbol.tintColor = UIColor.systemPurpleColor;
+    [glass.contentView addSubview:symbol];
+
+    UILabel *eyebrow = [UILabel new];
+    eyebrow.translatesAutoresizingMaskIntoConstraints = NO;
+    eyebrow.text = @"YOUR MINECRAFT";
+    eyebrow.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightBold];
+    eyebrow.textColor = UIColor.systemPurpleColor;
+    [glass.contentView addSubview:eyebrow];
+
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = @"Ready to play?";
+    title.font = [UIFont systemFontOfSize:29.0 weight:UIFontWeightBold];
+    title.adjustsFontSizeToFitWidth = YES;
+    title.minimumScaleFactor = 0.8;
+    [glass.contentView addSubview:title];
+
+    self.profileCountLabel = [UILabel new];
+    self.profileCountLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.profileCountLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    self.profileCountLabel.textColor = UIColor.secondaryLabelColor;
+    [glass.contentView addSubview:self.profileCountLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [glass.topAnchor constraintEqualToAnchor:header.topAnchor constant:10.0],
+        [glass.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:16.0],
+        [glass.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-16.0],
+        [glass.bottomAnchor constraintEqualToAnchor:header.bottomAnchor constant:-12.0],
+        [symbol.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor constant:22.0],
+        [symbol.centerYAnchor constraintEqualToAnchor:glass.contentView.centerYAnchor],
+        [symbol.widthAnchor constraintEqualToConstant:54.0],
+        [symbol.heightAnchor constraintEqualToConstant:54.0],
+        [eyebrow.leadingAnchor constraintEqualToAnchor:symbol.trailingAnchor constant:18.0],
+        [eyebrow.topAnchor constraintEqualToAnchor:glass.contentView.topAnchor constant:22.0],
+        [title.leadingAnchor constraintEqualToAnchor:eyebrow.leadingAnchor],
+        [title.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor constant:-18.0],
+        [title.topAnchor constraintEqualToAnchor:eyebrow.bottomAnchor constant:4.0],
+        [self.profileCountLabel.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+        [self.profileCountLabel.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+        [self.profileCountLabel.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:5.0]
+    ]];
+    self.tableView.tableHeaderView = header;
 }
 
 - (void)viewDidLoad
@@ -79,6 +138,8 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
 
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    AmethystStyleTableView(self.tableView);
+    [self buildProfileHeader];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -89,6 +150,9 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
 
     // Pickup changes made in the profile editor and switching instance
     [PLProfiles updateCurrent];
+    NSUInteger count = PLProfiles.current.profiles.count;
+    self.profileCountLabel.text = [NSString stringWithFormat:@"%lu profile%@ available",
+        (unsigned long)count, count == 1 ? @"" : @"s"];
     [self.tableView reloadData];
     [self.navigationController performSelector:@selector(reloadProfileList)];
 }
@@ -155,6 +219,7 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
         cell.imageView.image = [UIImage systemImageNamed:@"folder"];
         cell.textLabel.text = localize(@"preference.title.game_directory", nil);
         cell.detailTextLabel.text = getenv("DEMO_LOCK") ? @".demo" : getPrefObject(@"general.game_directory");
+        cell.imageView.tintColor = UIColor.systemBlueColor;
     } else {
         NSString *imageName;
         if (@available(iOS 15.0, *)) {
@@ -163,6 +228,7 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
             imageName = @"folder.badge.gear";
         }
         cell.imageView.image = [UIImage systemImageNamed:imageName];
+        cell.imageView.tintColor = UIColor.systemIndigoColor;
         cell.textLabel.text = localize(@"profile.title.separate_preference", nil);
         cell.detailTextLabel.text = localize(@"profile.detail.separate_preference", nil);
         UISwitch *view = [UISwitch new];
@@ -178,6 +244,9 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
     cell.textLabel.text = profile[@"name"];
     cell.detailTextLabel.text = profile[@"lastVersionId"];
     cell.imageView.layer.magnificationFilter = kCAFilterNearest;
+    cell.imageView.layer.cornerRadius = 12.0;
+    cell.imageView.layer.cornerCurve = kCACornerCurveContinuous;
+    cell.imageView.clipsToBounds = YES;
 
     UIImage *fallbackImage = [[UIImage imageNamed:@"DefaultProfile"] _imageWithSize:CGSizeMake(40, 40)];
     [cell.imageView setImageWithURL:[NSURL URLWithString:profile[@"icon"]] placeholderImage:fallbackImage];
@@ -209,11 +278,21 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
     }
 
     cell.textLabel.enabled = cell.detailTextLabel.enabled = cell.userInteractionEnabled;
+    cell.textLabel.font = [UIFont systemFontOfSize:17.0 weight:UIFontWeightSemibold];
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    AmethystStyleCell(cell);
     return cell;
 }
 
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateCellEntrance(cell, indexPath);
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:NO];
+    UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
+    AmethystAnimateSelection(cell);
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
 
     if (indexPath.section == kInstances) {
         if (indexPath.row == 0) {

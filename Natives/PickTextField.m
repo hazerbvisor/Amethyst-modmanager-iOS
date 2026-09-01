@@ -1,5 +1,6 @@
 #import "PickTextField.h"
 #import "UIKit+hook.h"
+#import "installer/LiquidGlassCompat.h"
 #import "utils.h"
 
 @interface PickViewController : UIViewController
@@ -51,8 +52,7 @@
 }
 
 - (BOOL)prefersPopoverPresentation {
-    BOOL hasLiquidGlass = NO;
-    return hasLiquidGlass || NSProcessInfo.processInfo.isMacCatalystApp;
+    return AmethystSupportsNativeLiquidGlass() || NSProcessInfo.processInfo.isMacCatalystApp;
 }
 
 - (void)setupDoneButtonWithTarget:(id)target action:(SEL)action {
@@ -97,7 +97,7 @@
 }
 
 - (BOOL)endEditing:(BOOL)force {
-    if (!NSProcessInfo.processInfo.isMacCatalystApp) {
+    if (!self.prefersPopoverPresentation) {
         return [super endEditing:force];
     }
 

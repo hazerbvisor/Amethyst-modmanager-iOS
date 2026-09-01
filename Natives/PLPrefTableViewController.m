@@ -7,6 +7,7 @@
 #import "LauncherPreferences.h"
 #import "PLPrefTableViewController.h"
 #import "UIKit+hook.h"
+#import "installer/LiquidGlassCompat.h"
 
 #import "ios_uikit_bridge.h"
 #import "utils.h"
@@ -25,12 +26,67 @@
     return self;
 }
 
+- (void)buildPreferenceHeader {
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0,
+        self.tableView.bounds.size.width, 142.0)];
+    UIVisualEffectView *glass = AmethystCreateGlassView(24.0, NO,
+        [UIColor.systemIndigoColor colorWithAlphaComponent:0.24]);
+    glass.translatesAutoresizingMaskIntoConstraints = NO;
+    [header addSubview:glass];
+
+    BOOL isProfile = [self.title.lowercaseString containsString:@"profile"];
+    UIImageView *symbol = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:
+        isProfile ? @"person.crop.square.fill" : @"slider.horizontal.3"]];
+    symbol.translatesAutoresizingMaskIntoConstraints = NO;
+    symbol.contentMode = UIViewContentModeScaleAspectFit;
+    symbol.tintColor = isProfile ? UIColor.systemPurpleColor : UIColor.systemIndigoColor;
+    [glass.contentView addSubview:symbol];
+
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = self.title ?: @"Preferences";
+    title.font = [UIFont systemFontOfSize:27.0 weight:UIFontWeightBold];
+    title.adjustsFontSizeToFitWidth = YES;
+    title.minimumScaleFactor = 0.75;
+    [glass.contentView addSubview:title];
+
+    UILabel *subtitle = [UILabel new];
+    subtitle.translatesAutoresizingMaskIntoConstraints = NO;
+    subtitle.text = isProfile
+        ? @"Version, content, controls, and runtime in one place."
+        : @"Personalize how Amethyst looks, feels, and plays.";
+    subtitle.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    subtitle.textColor = UIColor.secondaryLabelColor;
+    subtitle.numberOfLines = 2;
+    [glass.contentView addSubview:subtitle];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [glass.topAnchor constraintEqualToAnchor:header.topAnchor constant:8.0],
+        [glass.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:16.0],
+        [glass.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-16.0],
+        [glass.bottomAnchor constraintEqualToAnchor:header.bottomAnchor constant:-12.0],
+        [symbol.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor constant:20.0],
+        [symbol.centerYAnchor constraintEqualToAnchor:glass.contentView.centerYAnchor],
+        [symbol.widthAnchor constraintEqualToConstant:48.0],
+        [symbol.heightAnchor constraintEqualToConstant:48.0],
+        [title.leadingAnchor constraintEqualToAnchor:symbol.trailingAnchor constant:17.0],
+        [title.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor constant:-18.0],
+        [title.centerYAnchor constraintEqualToAnchor:glass.contentView.centerYAnchor constant:-13.0],
+        [subtitle.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+        [subtitle.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+        [subtitle.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:4.0]
+    ]];
+    self.tableView.tableHeaderView = header;
+}
+
 - (void)viewDidLoad
 {
     [super viewDidLoad];
 
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    AmethystStyleTableView(self.tableView);
+    [self buildPreferenceHeader];
     if (self.prefSections) {
         self.prefSectionsVisibility = [[NSMutableArray<NSNumber *> alloc] initWithCapacity:self.prefSections.count];
         for (int i = 0; i < self.prefSections.count; i++) {
@@ -77,7 +133,11 @@
 
 - (void)toggleDetailVisibility {
     self.prefDetailVisible = !self.prefDetailVisible;
-    [self.tableView reloadData];
+    [UIView transitionWithView:self.tableView duration:0.25
+        options:UIViewAnimationOptionTransitionCrossDissolve |
+            UIViewAnimationOptionAllowAnimatedContent animations:^{
+        [self.tableView reloadData];
+    } completion:nil];
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
@@ -139,8 +199,11 @@
 
     // Set general properties
     BOOL destructive = [item[@"destructive"] boolValue];
-    cell.imageView.tintColor = destructive ? UIColor.systemRedColor : nil;
-    cell.imageView.image = [UIImage systemImageNamed:item[@"icon"]];
+    cell.imageView.tintColor = destructive ? UIColor.systemRedColor : UIColor.systemIndigoColor;
+    UIImageSymbolConfiguration *symbolConfiguration = [UIImageSymbolConfiguration
+        configurationWithPointSize:18.0 weight:UIImageSymbolWeightMedium];
+    cell.imageView.image = [[UIImage systemImageNamed:item[@"icon"]]
+        imageByApplyingSymbolConfiguration:symbolConfiguration];
     
     if (cellStyle != UITableViewCellStyleValue1) {
         cell.detailTextLabel.text = nil;
@@ -155,7 +218,16 @@
     cell.textLabel.enabled = cell.detailTextLabel.enabled = cell.userInteractionEnabled;
     [(id)cell.accessoryView setEnabled:cell.userInteractionEnabled];
 
+    cell.textLabel.font = [UIFont systemFontOfSize:16.5 weight:UIFontWeightSemibold];
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    AmethystStyleCell(cell);
+
     return cell;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateCellEntrance(cell, indexPath);
 }
 
 #pragma mark initViewCreation, showAlert, checkWarn
@@ -190,6 +262,10 @@
         //view.nonEditingLinebreakMode = NSLineBreakByCharWrapping;
         view.returnKeyType = UIReturnKeyDone;
         view.textAlignment = NSTextAlignmentRight;
+        view.backgroundColor = UIColor.tertiarySystemFillColor;
+        view.layer.cornerRadius = 11.0;
+        view.layer.cornerCurve = kCACornerCurveContinuous;
+        view.clearButtonMode = UITextFieldViewModeWhileEditing;
         view.placeholder = localize((item[@"placeholder"] ? item[@"placeholder"] :
             [NSString stringWithFormat:@"preference.placeholder.%@", key]), nil);
         view.text = weakSelf.getPreference(section, key);
@@ -293,7 +369,8 @@
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:NO];
+    AmethystAnimateSelection([tableView cellForRowAtIndexPath:indexPath]);
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.row == 0 && self.prefSections) {
         self.prefSectionsVisibility[indexPath.section] = @(![self.prefSectionsVisibility[indexPath.section] boolValue]);
         [tableView reloadSections:[NSIndexSet indexSetWithIndex:indexPath.section] withRowAnimation:UITableViewRowAnimationFade];

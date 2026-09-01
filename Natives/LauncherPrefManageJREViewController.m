@@ -4,6 +4,7 @@
 #import "LauncherPreferences.h"
 #import "LauncherPrefManageJREViewController.h"
 #import "NSFileManager+NRFileManager.h"
+#import "installer/LiquidGlassCompat.h"
 #import "UIKit+hook.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
@@ -60,6 +61,7 @@ static WFWorkflowProgressView* currentProgressView;
 
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    AmethystStyleTableView(self.tableView);
 
     self.javaRuntimes = @{
         @(DEFAULT_JRE): @[@"preference.manage_runtime.default.1165", @"preference.manage_runtime.default.117", @"launcher.menu.execute_jar"]
@@ -190,6 +192,8 @@ static WFWorkflowProgressView* currentProgressView;
     cell.textLabel.text = localize(self.javaRuntimes[@DEFAULT_JRE][indexPath.row], nil);
     cell.detailTextLabel.text = [NSString stringWithFormat:@"Java %@",
         ((NSDictionary *)self.selectedRuntimes[@"0"])[self.selectedRTTags[indexPath.row]]];
+    cell.textLabel.font = [UIFont systemFontOfSize:16.5 weight:UIFontWeightSemibold];
+    AmethystStyleCell(cell);
     return cell;
 }
 
@@ -246,7 +250,15 @@ static WFWorkflowProgressView* currentProgressView;
         });
     });
 
+    cell.textLabel.font = [UIFont systemFontOfSize:16.5 weight:UIFontWeightSemibold];
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    AmethystStyleCell(cell);
     return cell;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateCellEntrance(cell, indexPath);
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {

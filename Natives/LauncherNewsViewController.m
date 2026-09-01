@@ -36,6 +36,10 @@ UIEdgeInsets insets;
     webView.translatesAutoresizingMaskIntoConstraints = NO;
     webView.navigationDelegate = self;
     webView.opaque = NO;
+    webView.backgroundColor = UIColor.clearColor;
+    webView.scrollView.backgroundColor = UIColor.clearColor;
+    webView.alpha = 0.0;
+    webView.transform = CGAffineTransformMakeTranslation(0.0, 8.0);
     [self adjustWebViewForSize:size];
     webView.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     NSString *javascript = @"var meta = document.createElement('meta');meta.setAttribute('name', 'viewport');meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');document.getElementsByTagName('head')[0].appendChild(meta);";
@@ -53,6 +57,17 @@ UIEdgeInsets insets;
     self.navigationItem.leftBarButtonItem = self.splitViewController.displayModeButtonItem;
     self.navigationItem.rightBarButtonItem = [sidebarViewController drawAccountButton];
     self.navigationItem.leftItemsSupplementBackButton = true;
+
+    if (UIAccessibilityIsReduceMotionEnabled()) {
+        webView.alpha = 1.0;
+        webView.transform = CGAffineTransformIdentity;
+    } else {
+        [UIView animateWithDuration:0.45 delay:0.05 usingSpringWithDamping:0.90
+            initialSpringVelocity:0.20 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+            webView.alpha = 1.0;
+            webView.transform = CGAffineTransformIdentity;
+        } completion:nil];
+    }
 }
 
 -(void)showWarningAlert:(NSString *)key hasPreference:(BOOL)isPreferenced exitWhenCompleted:(BOOL)shouldExit {

@@ -1,4 +1,5 @@
 #import "FileListViewController.h"
+#import "installer/LiquidGlassCompat.h"
 
 @interface FileListViewController () {
 }
@@ -30,7 +31,7 @@
         }
     }
 
-    [self.tableView setSeparatorStyle:UITableViewCellSeparatorStyleSingleLine];
+    AmethystStyleTableView(self.tableView);
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
@@ -47,10 +48,18 @@
     }
 
     cell.textLabel.text = [self.fileList objectAtIndex:indexPath.row];
+    cell.textLabel.font = [UIFont systemFontOfSize:16.5 weight:UIFontWeightSemibold];
+    AmethystStyleCell(cell);
     return cell;
 }
 
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateCellEntrance(cell, indexPath);
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateSelection([tableView cellForRowAtIndexPath:indexPath]);
     [self dismissViewControllerAnimated:YES completion:nil];
 
     self.whenItemSelected(self.fileList [indexPath.row]);

@@ -3,6 +3,7 @@
 #import "LauncherProfilesViewController.h"
 #import "LauncherNavigationController.h"
 #import "LauncherPreferences.h"
+#import "installer/LiquidGlassCompat.h"
 #import "utils.h"
 
 extern NSMutableDictionary *prefDict;
@@ -15,7 +16,9 @@ extern NSMutableDictionary *prefDict;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = UIColor.systemBackgroundColor;
+    AmethystApplyGlobalAppearance();
+    self.view.backgroundColor = UIColor.systemGroupedBackgroundColor;
+    self.view.tintColor = UIColor.systemIndigoColor;
     if ([getPrefObject(@"control.control_safe_area") length] == 0) {
         setPrefObject(@"control.control_safe_area", NSStringFromUIEdgeInsets(getDefaultSafeArea()));
     }
@@ -23,13 +26,17 @@ extern NSMutableDictionary *prefDict;
     self.delegate = self;
 
     UINavigationController *masterVc = [[UINavigationController alloc] initWithRootViewController:[[LauncherMenuViewController alloc] init]];
+    masterVc.navigationBar.prefersLargeTitles = NO;
     LauncherNavigationController *detailVc = [[LauncherNavigationController alloc] initWithRootViewController:[[LauncherProfilesViewController alloc] init]];
+    detailVc.navigationBar.prefersLargeTitles = YES;
     detailVc.toolbarHidden = NO;
 
     self.viewControllers = @[masterVc, detailVc];
     [self changeDisplayModeForSize:self.view.frame.size];
     
-    self.maximumPrimaryColumnWidth = self.view.bounds.size.width * 0.95;
+    self.minimumPrimaryColumnWidth = 260.0;
+    self.maximumPrimaryColumnWidth = 360.0;
+    self.preferredPrimaryColumnWidthFraction = 0.27;
 }
 
 - (void)splitViewController:(UISplitViewController *)svc willChangeToDisplayMode:(UISplitViewControllerDisplayMode)displayMode {

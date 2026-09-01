@@ -8,6 +8,7 @@
 #import "LauncherMenuViewController.h"
 #import "LauncherNavigationController.h"
 #import "LauncherPreferences.h"
+#import "installer/LiquidGlassCompat.h"
 #import "MinecraftResourceDownloadTask.h"
 #import "MinecraftResourceUtils.h"
 #import "PickTextField.h"
@@ -49,7 +50,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
     }
     UIToolbar *targetToolbar = self.toolbar;
-    BOOL hasLiquidGlass = NO;
+    BOOL hasLiquidGlass = AmethystSupportsNativeLiquidGlass();
     
     if(hasLiquidGlass) {
         self.versionTextField = [[PickTextField alloc] initWithFrame:CGRectMake(0, 0, MIN(self.view.frame.size.width,self.view.frame.size.height)*0.8 - 40, 36)];
@@ -67,6 +68,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.versionTextField.leftViewMode = UITextFieldViewModeAlways;
     self.versionTextField.rightViewMode = UITextFieldViewModeAlways;
     self.versionTextField.textAlignment = NSTextAlignmentCenter;
+    self.versionTextField.backgroundColor = UIColor.tertiarySystemFillColor;
+    self.versionTextField.layer.cornerRadius = 18.0;
+    self.versionTextField.layer.cornerCurve = kCACornerCurveContinuous;
+    self.versionTextField.clipsToBounds = YES;
 
     self.versionPickerView = [[PLPickerView alloc] init];
     self.versionPickerView.delegate = self;
@@ -100,11 +105,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         setButtonPointerInteraction(self.buttonInstall);
         [self.buttonInstall setTitle:localize(@"Play", nil) forState:UIControlStateNormal];
         self.buttonInstall.autoresizingMask = AUTORESIZE_MASKS;
-        self.buttonInstall.backgroundColor = [UIColor colorWithRed:121/255.0 green:56/255.0 blue:162/255.0 alpha:1.0];
-        self.buttonInstall.layer.cornerRadius = 5;
+        self.buttonInstall.backgroundColor = UIColor.clearColor;
+        self.buttonInstall.layer.cornerRadius = 20.0;
         self.buttonInstall.frame = CGRectMake(self.toolbar.frame.size.width * 0.8, 4, self.toolbar.frame.size.width * 0.2, self.toolbar.frame.size.height - 8);
         self.buttonInstall.tintColor = UIColor.whiteColor;
         self.buttonInstall.enabled = NO;
+        self.buttonInstall.titleLabel.font = [UIFont systemFontOfSize:16.0 weight:UIFontWeightBold];
+        AmethystInstallGlassBackground(self.buttonInstall, 20.0, YES, UIColor.systemPurpleColor);
         [self.buttonInstall addTarget:self action:@selector(performInstallOrShowDetails:) forControlEvents:UIControlEventPrimaryActionTriggered];
         [targetToolbar addSubview:self.progressViewMain];
         [targetToolbar addSubview:self.versionTextField];

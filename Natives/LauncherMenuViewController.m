@@ -9,6 +9,7 @@
 #import "LauncherPreferencesViewController.h"
 #import "LauncherProfilesViewController.h"
 #import "PLProfiles.h"
+#import "installer/LiquidGlassCompat.h"
 #import "UIButton+AFNetworking.h"
 #import "UIImageView+AFNetworking.h"
 #import "UIKit+hook.h"
@@ -49,15 +50,60 @@
 
 #define contentNavigationController ((LauncherNavigationController *)self.splitViewController.viewControllers[1])
 
+- (void)buildSidebarHeader {
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0,
+        self.tableView.bounds.size.width, 128.0)];
+    UIVisualEffectView *glass = AmethystCreateGlassView(24.0, NO,
+        [UIColor.systemIndigoColor colorWithAlphaComponent:0.35]);
+    glass.translatesAutoresizingMaskIntoConstraints = NO;
+    [header addSubview:glass];
+
+    UIImageView *logo = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"AppLogo"]];
+    logo.translatesAutoresizingMaskIntoConstraints = NO;
+    logo.contentMode = UIViewContentModeScaleAspectFit;
+    logo.layer.cornerRadius = 15.0;
+    logo.layer.cornerCurve = kCACornerCurveContinuous;
+    logo.clipsToBounds = YES;
+    [glass.contentView addSubview:logo];
+
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = @"Amethyst";
+    title.font = [UIFont systemFontOfSize:24.0 weight:UIFontWeightBold];
+    [glass.contentView addSubview:title];
+
+    UILabel *subtitle = [UILabel new];
+    subtitle.translatesAutoresizingMaskIntoConstraints = NO;
+    subtitle.text = @"PLAY YOUR WAY";
+    subtitle.font = [UIFont systemFontOfSize:11.0 weight:UIFontWeightSemibold];
+    subtitle.textColor = UIColor.secondaryLabelColor;
+    [glass.contentView addSubview:subtitle];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [glass.topAnchor constraintEqualToAnchor:header.topAnchor constant:10.0],
+        [glass.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:12.0],
+        [glass.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-12.0],
+        [glass.bottomAnchor constraintEqualToAnchor:header.bottomAnchor constant:-12.0],
+        [logo.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor constant:16.0],
+        [logo.centerYAnchor constraintEqualToAnchor:glass.contentView.centerYAnchor],
+        [logo.widthAnchor constraintEqualToConstant:58.0],
+        [logo.heightAnchor constraintEqualToConstant:58.0],
+        [title.leadingAnchor constraintEqualToAnchor:logo.trailingAnchor constant:14.0],
+        [title.trailingAnchor constraintLessThanOrEqualToAnchor:glass.contentView.trailingAnchor constant:-12.0],
+        [title.centerYAnchor constraintEqualToAnchor:glass.contentView.centerYAnchor constant:-8.0],
+        [subtitle.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+        [subtitle.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:2.0]
+    ]];
+    self.tableView.tableHeaderView = header;
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     
     self.isInitialVc = YES;
     
-    UIImageView *titleView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"AppLogo"]];
-    [titleView setContentMode:UIViewContentModeScaleAspectFit];
-    self.navigationItem.titleView = titleView;
-    [titleView sizeToFit];
+    self.navigationItem.title = @"Library";
+    UIView *titleView = self.view;
     
     self.options = @[
         [LauncherMenuCustomItem vcClass:LauncherNewsViewController.class],
@@ -113,7 +159,10 @@
         }]];
     }
     
+    AmethystStyleTableView(self.tableView);
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    self.tableView.rowHeight = 62.0;
+    [self buildSidebarHeader];
     
     self.navigationController.toolbarHidden = NO;
     UIActivityIndicatorViewStyle indicatorStyle = UIActivityIndicatorViewStyleMedium;
@@ -171,8 +220,14 @@
         self.accountButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
 
         self.accountButton.titleEdgeInsets = UIEdgeInsetsMake(0, 4, 0, -4);
+        self.accountButton.contentEdgeInsets = UIEdgeInsetsMake(5, 8, 5, 10);
         self.accountButton.imageView.contentMode = UIViewContentModeScaleAspectFit;
+        self.accountButton.imageView.layer.cornerRadius = 15.0;
+        self.accountButton.imageView.layer.cornerCurve = kCACornerCurveContinuous;
+        self.accountButton.imageView.clipsToBounds = YES;
         self.accountButton.titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
+        self.accountButton.titleLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold];
+        AmethystInstallGlassBackground(self.accountButton, 18.0, YES, nil);
         self.accountBtnItem = [[UIBarButtonItem alloc] initWithCustomView:self.accountButton];
     }
 
@@ -200,31 +255,31 @@
     }
 
     cell.textLabel.text = [self.options[indexPath.row] title];
-    
-    UIImage *origImage = [UIImage systemImageNamed:[self.options[indexPath.row]
-        performSelector:@selector(imageName)]];
-    if (origImage) {
-        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(40, 40)];
-        UIImage *image = [renderer imageWithActions:^(UIGraphicsImageRendererContext*_Nonnull myContext) {
-            CGFloat scaleFactor = 40/origImage.size.height;
-            [origImage drawInRect:CGRectMake(20 - origImage.size.width*scaleFactor/2, 0, origImage.size.width*scaleFactor, 40)];
-        }];
-        cell.imageView.image = [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    }
-    
-    if (cell.imageView.image == nil) {
-        cell.imageView.layer.magnificationFilter = kCAFilterNearest;
-        cell.imageView.layer.minificationFilter = kCAFilterNearest;
-        cell.imageView.image = [UIImage imageNamed:[self.options[indexPath.row]
-            performSelector:@selector(imageName)]];
-        cell.imageView.image = [cell.imageView.image _imageWithSize:CGSizeMake(40, 40)];
-    }
+    cell.textLabel.font = [UIFont systemFontOfSize:17.0 weight:UIFontWeightSemibold];
+    cell.textLabel.textColor = UIColor.labelColor;
+    NSArray<NSString *> *symbols = @[@"newspaper.fill", @"square.stack.3d.up.fill",
+        @"gearshape.fill", @"gamecontroller.fill", @"shippingbox.fill",
+        @"square.and.arrow.up", @"heart.fill"];
+    NSString *symbol = indexPath.row < symbols.count ? symbols[indexPath.row] : @"sparkles";
+    UIImageSymbolConfiguration *configuration = [UIImageSymbolConfiguration
+        configurationWithPointSize:20.0 weight:UIImageSymbolWeightSemibold];
+    cell.imageView.image = [[UIImage systemImageNamed:symbol]
+        imageByApplyingSymbolConfiguration:configuration];
+    cell.imageView.tintColor = indexPath.row == 1 ? UIColor.systemPurpleColor : UIColor.systemIndigoColor;
+    cell.accessoryType = UITableViewCellAccessoryNone;
+    AmethystStyleCell(cell);
     return cell;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateCellEntrance(cell, indexPath);
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
 {
     LauncherMenuCustomItem *selected = self.options[indexPath.row];
+    AmethystAnimateSelection([tableView cellForRowAtIndexPath:indexPath]);
     
     if (selected.action != nil) {
         [self restoreHighlightedSelection];
@@ -234,7 +289,11 @@
             self.isInitialVc = NO;
         } else {
             self.options[self.lastSelectedIndex].vcArray = contentNavigationController.viewControllers;
-            [contentNavigationController setViewControllers:selected.vcArray animated:NO];
+            [UIView transitionWithView:contentNavigationController.view duration:0.32
+                options:UIViewAnimationOptionTransitionCrossDissolve |
+                    UIViewAnimationOptionAllowAnimatedContent animations:^{
+                [contentNavigationController setViewControllers:selected.vcArray animated:NO];
+            } completion:nil];
             self.lastSelectedIndex = indexPath.row;
         }
         selected.vcArray[0].navigationItem.rightBarButtonItem = self.accountBtnItem;

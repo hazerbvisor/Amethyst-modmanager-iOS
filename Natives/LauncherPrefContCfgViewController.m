@@ -8,6 +8,7 @@
 #import "LauncherPreferences.h"
 #import "LauncherPrefContCfgViewController.h"
 #import "PickTextField.h"
+#import "installer/LiquidGlassCompat.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 
@@ -46,6 +47,7 @@ typedef void(^CreateView)(UITableViewCell *, NSString *, NSDictionary *);
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
     self.tableView.sectionFooterHeight = 50;
+    AmethystStyleTableView(self.tableView);
     
     [self loadGamepadConfigurationFile];
     self.prefControllerTypes = @[@{@"name": @"xbox"}, @{@"name": @"playstation"}];
@@ -136,6 +138,9 @@ typedef void(^CreateView)(UITableViewCell *, NSString *, NSDictionary *);
             cell.accessoryView = view;
         }
         view.text = self.keyCodeMap[[self.keyValueMap indexOfObject:keycode]];
+        view.backgroundColor = UIColor.tertiarySystemFillColor;
+        view.layer.cornerRadius = 11.0;
+        view.layer.cornerCurve = kCACornerCurveContinuous;
         objc_setAssociatedObject(view, @"gamepad_button", item[@"name"], OBJC_ASSOCIATION_ASSIGN);
         objc_setAssociatedObject(view, @"item", item, OBJC_ASSOCIATION_ASSIGN);
     } else if(indexPath.section == 3) {
@@ -146,7 +151,15 @@ typedef void(^CreateView)(UITableViewCell *, NSString *, NSDictionary *);
             cell.accessoryType = UITableViewCellAccessoryNone;
         }
     }
+    cell.textLabel.font = [UIFont systemFontOfSize:16.0 weight:UIFontWeightSemibold];
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    AmethystStyleCell(cell);
     return cell;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateCellEntrance(cell, indexPath);
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
@@ -160,7 +173,8 @@ typedef void(^CreateView)(UITableViewCell *, NSString *, NSDictionary *);
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:NO];
+    AmethystAnimateSelection([tableView cellForRowAtIndexPath:indexPath]);
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
 
     NSDictionary *item = [self prefContentForIndex:indexPath.section][indexPath.row];
     UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];

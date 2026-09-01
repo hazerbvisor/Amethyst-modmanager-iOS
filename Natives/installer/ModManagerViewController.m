@@ -86,9 +86,62 @@ static NSString *AmethystReadableFilterName(NSString *value) {
 @property(nonatomic) NSString *modsDirectory;
 @property(nonatomic) NSMutableArray<NSString *> *mods;
 @property(nonatomic) AmethystContentType contentType;
+@property(nonatomic) UIBarButtonItem *addButtonItem;
+@property(nonatomic) UIBarButtonItem *deleteButtonItem;
+@property(nonatomic) UILabel *managerCountLabel;
+- (void)confirmDeleteAtIndexPath:(NSIndexPath *)indexPath sourceView:(UIView *)sourceView
+    completion:(void (^)(BOOL deleted))completion;
 @end
 
 @implementation ModManagerViewController
+
+- (void)buildManagerHeader {
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0,
+        self.tableView.bounds.size.width, 142.0)];
+    UIColor *accent = self.contentType == AmethystContentTypeMod
+        ? UIColor.systemIndigoColor : UIColor.systemPurpleColor;
+    UIVisualEffectView *glass = AmethystCreateGlassView(24.0, NO,
+        [accent colorWithAlphaComponent:0.28]);
+    glass.translatesAutoresizingMaskIntoConstraints = NO;
+    [header addSubview:glass];
+
+    UIImageView *symbol = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:
+        AmethystContentSymbol(self.contentType)]];
+    symbol.translatesAutoresizingMaskIntoConstraints = NO;
+    symbol.contentMode = UIViewContentModeScaleAspectFit;
+    symbol.tintColor = accent;
+    [glass.contentView addSubview:symbol];
+
+    UILabel *title = [UILabel new];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.text = AmethystContentPlural(self.contentType);
+    title.font = [UIFont systemFontOfSize:28.0 weight:UIFontWeightBold];
+    [glass.contentView addSubview:title];
+
+    self.managerCountLabel = [UILabel new];
+    self.managerCountLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.managerCountLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    self.managerCountLabel.textColor = UIColor.secondaryLabelColor;
+    [glass.contentView addSubview:self.managerCountLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [glass.topAnchor constraintEqualToAnchor:header.topAnchor constant:8.0],
+        [glass.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:16.0],
+        [glass.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-16.0],
+        [glass.bottomAnchor constraintEqualToAnchor:header.bottomAnchor constant:-12.0],
+        [symbol.leadingAnchor constraintEqualToAnchor:glass.contentView.leadingAnchor constant:22.0],
+        [symbol.centerYAnchor constraintEqualToAnchor:glass.contentView.centerYAnchor],
+        [symbol.widthAnchor constraintEqualToConstant:48.0],
+        [symbol.heightAnchor constraintEqualToConstant:48.0],
+        [title.leadingAnchor constraintEqualToAnchor:symbol.trailingAnchor constant:17.0],
+        [title.trailingAnchor constraintEqualToAnchor:glass.contentView.trailingAnchor constant:-18.0],
+        [title.centerYAnchor constraintEqualToAnchor:glass.contentView.centerYAnchor constant:-12.0],
+        [self.managerCountLabel.leadingAnchor constraintEqualToAnchor:title.leadingAnchor],
+        [self.managerCountLabel.trailingAnchor constraintEqualToAnchor:title.trailingAnchor],
+        [self.managerCountLabel.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:4.0]
+    ]];
+    self.tableView.tableHeaderView = header;
+}
 
 - (instancetype)initWithProfile:(NSMutableDictionary *)profile {
     return [self initWithProfile:profile contentType:AmethystContentTypeMod];
@@ -116,6 +169,8 @@ static NSString *AmethystReadableFilterName(NSString *value) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.tableView.allowsSelection = NO;
+    AmethystStyleTableView(self.tableView);
+    [self buildManagerHeader];
 
     NSString *singular = AmethystContentSingular(self.contentType);
     NSString *extension = AmethystContentExtension(self.contentType).uppercaseString;
@@ -132,8 +187,31 @@ static NSString *AmethystReadableFilterName(NSString *value) {
     }];
     UIMenu *menu = [UIMenu menuWithTitle:[NSString stringWithFormat:@"Add %@", singular.capitalizedString]
         children:@[browse, importFile]];
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc]
+    self.addButtonItem = [[UIBarButtonItem alloc]
         initWithBarButtonSystemItem:UIBarButtonSystemItemAdd menu:menu];
+    self.deleteButtonItem = [[UIBarButtonItem alloc]
+        initWithImage:[UIImage systemImageNamed:@"trash"] style:UIBarButtonItemStylePlain
+        target:self action:@selector(actionToggleDeleteMode)];
+    self.deleteButtonItem.tintColor = UIColor.systemRedColor;
+    self.deleteButtonItem.accessibilityLabel = @"Delete installed content";
+    self.navigationItem.rightBarButtonItems = @[self.addButtonItem, self.deleteButtonItem];
+}
+
+- (void)updateDeleteButtonAppearance {
+    BOOL editing = self.tableView.isEditing;
+    self.deleteButtonItem.title = editing ? @"Done" : nil;
+    self.deleteButtonItem.image = editing ? nil : [UIImage systemImageNamed:@"trash"];
+    self.deleteButtonItem.style = editing ? UIBarButtonItemStyleDone : UIBarButtonItemStylePlain;
+    self.deleteButtonItem.tintColor = editing ? self.view.tintColor : UIColor.systemRedColor;
+    self.deleteButtonItem.accessibilityLabel = editing ? @"Finish deleting" : @"Delete installed content";
+}
+
+- (void)actionToggleDeleteMode {
+    if (self.mods.count == 0) return;
+    BOOL editing = !self.tableView.isEditing;
+    [self.tableView setEditing:editing animated:YES];
+    self.addButtonItem.enabled = !editing;
+    [self updateDeleteButtonAppearance];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -163,6 +241,14 @@ static NSString *AmethystReadableFilterName(NSString *value) {
     }];
     self.mods = [[contents filteredArrayUsingPredicate:jarPredicate] mutableCopy] ?: [NSMutableArray new];
     [self.mods sortUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+    self.managerCountLabel.text = [NSString stringWithFormat:@"%lu installed • Add or remove anytime",
+        (unsigned long)self.mods.count];
+    self.deleteButtonItem.enabled = self.mods.count > 0;
+    if (self.mods.count == 0 && self.tableView.isEditing) {
+        [self.tableView setEditing:NO animated:YES];
+        self.addButtonItem.enabled = YES;
+        [self updateDeleteButtonAppearance];
+    }
     [self.tableView reloadData];
 }
 
@@ -252,6 +338,7 @@ static NSString *AmethystReadableFilterName(NSString *value) {
         cell.detailTextLabel.text = [NSString stringWithFormat:@"Tap + to browse Modrinth or import a %@.",
             AmethystContentExtension(self.contentType).uppercaseString];
         cell.textLabel.enabled = cell.detailTextLabel.enabled = NO;
+        AmethystStyleCell(cell);
         return cell;
     }
 
@@ -271,7 +358,17 @@ static NSString *AmethystReadableFilterName(NSString *value) {
         [toggle addTarget:self action:@selector(toggleMod:) forControlEvents:UIControlEventValueChanged];
         cell.accessoryView = toggle;
     }
+    cell.textLabel.font = [UIFont systemFontOfSize:16.5 weight:UIFontWeightSemibold];
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    cell.imageView.tintColor = self.contentType == AmethystContentTypeMod
+        ? UIColor.systemIndigoColor : UIColor.systemPurpleColor;
+    AmethystStyleCell(cell);
     return cell;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateCellEntrance(cell, indexPath);
 }
 
 - (void)toggleMod:(UISwitch *)sender {
@@ -315,27 +412,54 @@ static NSString *AmethystReadableFilterName(NSString *value) {
     if (self.mods.count == 0) return nil;
     UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive
         title:@"Delete" handler:^(UIContextualAction *action, UIView *sourceView, void (^completionHandler)(BOOL)) {
-        NSString *filename = self.mods[indexPath.row];
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:
-            [NSString stringWithFormat:@"Delete %@?", AmethystContentSingular(self.contentType)]
-            message:filename preferredStyle:UIAlertControllerStyleActionSheet];
-        alert.popoverPresentationController.sourceView = sourceView;
-        alert.popoverPresentationController.sourceRect = sourceView.bounds;
-        [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel
-            handler:^(UIAlertAction *action) { completionHandler(NO); }]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive
-            handler:^(UIAlertAction *action) {
-            NSError *error = nil;
-            [NSFileManager.defaultManager removeItemAtPath:
-                [self.modsDirectory stringByAppendingPathComponent:filename] error:&error];
-            if (error) showDialog(@"Delete failed", error.localizedDescription);
-            else [self removeRegistryEntriesForFilename:filename];
-            [self reloadMods];
-            completionHandler(error == nil);
-        }]];
-        [self presentViewController:alert animated:YES completion:nil];
+        [self confirmDeleteAtIndexPath:indexPath sourceView:sourceView completion:completionHandler];
     }];
+    deleteAction.image = [UIImage systemImageNamed:@"trash"];
     return [UISwipeActionsConfiguration configurationWithActions:@[deleteAction]];
+}
+
+- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
+    return self.mods.count > 0 && indexPath.row < self.mods.count;
+}
+
+- (UITableViewCellEditingStyle)tableView:(UITableView *)tableView
+    editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
+    return [self tableView:tableView canEditRowAtIndexPath:indexPath]
+        ? UITableViewCellEditingStyleDelete : UITableViewCellEditingStyleNone;
+}
+
+- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (editingStyle != UITableViewCellEditingStyleDelete) return;
+    UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
+    [self confirmDeleteAtIndexPath:indexPath sourceView:cell completion:nil];
+}
+
+- (void)confirmDeleteAtIndexPath:(NSIndexPath *)indexPath sourceView:(UIView *)sourceView
+    completion:(void (^)(BOOL deleted))completion {
+    if (indexPath.row >= self.mods.count) {
+        if (completion) completion(NO);
+        return;
+    }
+    NSString *filename = self.mods[indexPath.row];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:
+        [NSString stringWithFormat:@"Delete %@?", AmethystContentSingular(self.contentType)]
+        message:filename preferredStyle:UIAlertControllerStyleActionSheet];
+    alert.popoverPresentationController.sourceView = sourceView ?: self.view;
+    alert.popoverPresentationController.sourceRect = sourceView ? sourceView.bounds : self.view.bounds;
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel
+        handler:^(UIAlertAction *action) { if (completion) completion(NO); }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive
+        handler:^(UIAlertAction *action) {
+        NSError *error = nil;
+        [NSFileManager.defaultManager removeItemAtPath:
+            [self.modsDirectory stringByAppendingPathComponent:filename] error:&error];
+        if (error) showDialog(@"Delete failed", error.localizedDescription);
+        else [self removeRegistryEntriesForFilename:filename];
+        [self reloadMods];
+        if (completion) completion(error == nil);
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 @end
@@ -592,9 +716,9 @@ static NSString *AmethystReadableFilterName(NSString *value) {
     self.api = [ModrinthAPI new];
     self.results = [NSMutableArray new];
     self.installedProjectIds = [NSMutableSet new];
+    AmethystStyleTableView(self.tableView);
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.rowHeight = 130.0;
-    self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
 
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];

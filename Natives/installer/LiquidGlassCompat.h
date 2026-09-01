@@ -11,4 +11,20 @@ UIVisualEffectView *AmethystCreateGlassView(CGFloat cornerRadius,
 void AmethystInstallGlassBackground(UIButton *button, CGFloat cornerRadius,
     BOOL interactive, UIColor * _Nullable tintColor);
 
+/// True when the running OS exposes Apple's native Liquid Glass effect.
+BOOL AmethystSupportsNativeLiquidGlass(void);
+
+/// Installs the shared Apple-inspired navigation, toolbar, and control appearance.
+void AmethystApplyGlobalAppearance(void);
+
+/// Applies the ambient glass canvas used by launcher list screens.
+void AmethystStyleTableView(UITableView *tableView);
+
+/// Gives standard UIKit cells a material card and a tinted selected state.
+void AmethystStyleCell(UITableViewCell *cell);
+
+/// Lightweight spring motion for rows entering the viewport and being selected.
+void AmethystAnimateCellEntrance(UITableViewCell *cell, NSIndexPath *indexPath);
+void AmethystAnimateSelection(UIView *view);
+
 NS_ASSUME_NONNULL_END

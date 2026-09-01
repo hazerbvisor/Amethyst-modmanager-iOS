@@ -112,13 +112,19 @@ static void AmethystAppendArtworkURL(NSMutableArray<NSURL *> *urls, id value) {
     [super viewDidLoad];
     self.api = [ModrinthAPI new];
     self.versions = @[];
-    self.tableView.backgroundColor = UIColor.systemGroupedBackgroundColor;
+    AmethystStyleTableView(self.tableView);
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 110.0;
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
     [self buildHeroHeader];
     [self loadProjectDetails];
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (indexPath.section == 1) AmethystStyleCell(cell);
+    AmethystAnimateCellEntrance(cell, indexPath);
 }
 
 - (void)viewDidLayoutSubviews {

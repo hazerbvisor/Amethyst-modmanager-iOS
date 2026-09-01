@@ -4,6 +4,7 @@
 #import "AccountListViewController.h"
 #import "AFNetworking.h"
 #import "LauncherPreferences.h"
+#import "installer/LiquidGlassCompat.h"
 #import "UIImageView+AFNetworking.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
@@ -39,7 +40,7 @@
         }
     }
 
-    [self.tableView setSeparatorStyle:UITableViewCellSeparatorStyleSingleLine];
+    AmethystStyleTableView(self.tableView);
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
@@ -58,6 +59,8 @@
     if (indexPath.row == self.accountList.count) {
         cell.imageView.image = [UIImage imageNamed:@"IconAdd"];
         cell.textLabel.text = localize(@"login.option.add", nil);
+        cell.textLabel.font = [UIFont systemFontOfSize:16.5 weight:UIFontWeightSemibold];
+        AmethystStyleCell(cell);
         return cell;
     }
 
@@ -76,13 +79,25 @@
     }
 
     cell.imageView.contentMode = UIViewContentModeCenter;
+    cell.imageView.layer.cornerRadius = 15.0;
+    cell.imageView.layer.cornerCurve = kCACornerCurveContinuous;
+    cell.imageView.clipsToBounds = YES;
     [cell.imageView setImageWithURL:[NSURL URLWithString:[selected[@"profilePicURL"] stringByReplacingOccurrencesOfString:@"\\/" withString:@"/"]] placeholderImage:[UIImage imageNamed:@"DefaultAccount"]];
 
+    cell.textLabel.font = [UIFont systemFontOfSize:16.5 weight:UIFontWeightSemibold];
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    AmethystStyleCell(cell);
     return cell;
 }
 
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateCellEntrance(cell, indexPath);
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:NO];
+    AmethystAnimateSelection([tableView cellForRowAtIndexPath:indexPath]);
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
     UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
 
     if (indexPath.row == self.accountList.count) {

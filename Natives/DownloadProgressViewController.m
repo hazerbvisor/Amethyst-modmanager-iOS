@@ -2,6 +2,7 @@
 #import <objc/runtime.h>
 #import "DownloadProgressViewController.h"
 #import "WFWorkflowProgressView.h"
+#import "installer/LiquidGlassCompat.h"
 
 static void *CellProgressObserverContext = &CellProgressObserverContext;
 static void *TotalProgressObserverContext = &TotalProgressObserverContext;
@@ -22,6 +23,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
     [super loadView];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(actionClose)];
     self.tableView.allowsSelection = NO;
+    AmethystStyleTableView(self.tableView);
 
     // Load WFWorkflowProgressView
     dlopen("/System/Library/PrivateFrameworks/WorkflowUIServices.framework/WorkflowUIServices", RTLD_GLOBAL);
@@ -115,7 +117,15 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 
     cell.textLabel.text = self.task.fileList[indexPath.row];
     cell.detailTextLabel.text = progress.localizedAdditionalDescription;
+    cell.textLabel.font = [UIFont systemFontOfSize:16.0 weight:UIFontWeightSemibold];
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    AmethystStyleCell(cell);
     return cell;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+    AmethystAnimateCellEntrance(cell, indexPath);
 }
 
 @end
