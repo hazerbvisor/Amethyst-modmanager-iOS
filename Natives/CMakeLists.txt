@@ -143,6 +143,13 @@ add_library(AmethystAccountJNI SHARED
 )
 target_link_libraries(AmethystAccountJNI)
 
+# Haze Phase 4 JNI terrain bridge. The Makefile copies every build/*.dylib into
+# the signed app Frameworks directory, which is already on java.library.path.
+add_library(hazejnibridge SHARED
+  haze/HazeJNIBridge.m
+)
+target_link_libraries(hazejnibridge)
+
 # Audio capture JNI bridge
 add_library(audio_capture SHARED
   audio_capture_bridge.m
