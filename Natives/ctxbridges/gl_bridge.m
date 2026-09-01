@@ -11,7 +11,12 @@ static EGLDisplay g_EglDisplay;
 static egl_library handle;
 
 void dlsym_EGL() {
-    void* dl_handle = dlopen("@rpath/libtinygl4angle.dylib", RTLD_GLOBAL);
+    NSString *renderer = NSProcessInfo.processInfo.environment[@"AMETHYST_RENDERER"];
+    BOOL useKrypton = [renderer isEqualToString:@ RENDERER_NAME_KRYPTON];
+    // Krypton supplies the desktop-GL wrapper itself. Resolve EGL directly
+    // from ANGLE so tinygl4angle cannot interpose a second GL wrapper.
+    void* dl_handle = useKrypton ? NULL
+        : dlopen("@rpath/libtinygl4angle.dylib", RTLD_GLOBAL);
     if (!dl_handle) {
         dl_handle = dlopen("@rpath/libEGL.framework/libEGL", RTLD_LOCAL);
     }
@@ -19,8 +24,7 @@ void dlsym_EGL() {
         NSLog(@"EGLBridge: Failed to load ANGLE EGL library");
         return;
     }
-    BOOL useLTW = [@ RENDERER_NAME_LTW isEqualToString:
-        NSProcessInfo.processInfo.environment[@"AMETHYST_RENDERER"]];
+    BOOL useLTW = [renderer isEqualToString:@ RENDERER_NAME_LTW];
 
     handle.eglBindAPI = dlsym(dl_handle, "eglBindAPI");
     handle.eglChooseConfig = dlsym(dl_handle, "eglChooseConfig");

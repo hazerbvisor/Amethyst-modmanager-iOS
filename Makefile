@@ -256,7 +256,7 @@ check:
 		$(info $(shell printf "%-20s" "$(v)") = $(value $(v)))) \
 	)
 
-native: dep_mg
+native: dep_mg dep_krypton
 	echo '[Amethyst v$(VERSION)] native - start'
 	mkdir -p $(WORKINGDIR)
 	cd $(WORKINGDIR) && cmake \
@@ -328,6 +328,25 @@ $(SOURCEDIR)/Natives/external/MobileGlues/src/main/cpp/
 	cp $(WORKINGDIR)/mobileglues/libmobileglues*.dylib $(WORKINGDIR)/
 	cp $(WORKINGDIR)/mobileglues/libspirv-cross*.dylib $(WORKINGDIR)/ 2>/dev/null || true
 	echo '[Amethyst v$(VERSION)] dep_mg - end'
+
+dep_krypton:
+	echo '[Amethyst v$(VERSION)] dep_krypton - start'
+	mkdir -p $(WORKINGDIR)/krypton
+	cmake -S $(SOURCEDIR)/Natives/cmake/krypton -B $(WORKINGDIR)/krypton \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_CROSSCOMPILING=true \
+		-DCMAKE_SYSTEM_NAME=Darwin \
+		-DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+		-DCMAKE_OSX_SYSROOT="$(SDKPATH)" \
+		-DCMAKE_OSX_ARCHITECTURES=arm64 \
+		-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
+		-DCMAKE_C_FLAGS="-target arm64-apple-ios14.0 -arch arm64" \
+		-DCMAKE_CXX_FLAGS="-target arm64-apple-ios14.0 -arch arm64" \
+		-DKRYPTON_SOURCE_DIR=$(SOURCEDIR)/Natives/external/NG-GL4ES \
+		-DKRYPTON_ANGLE_FRAMEWORK_DIR=$(SOURCEDIR)/Natives/resources/Frameworks
+	cmake --build $(WORKINGDIR)/krypton --config RelWithDebInfo -j$(JOBS) --target krypton
+	cp $(WORKINGDIR)/krypton/libkrypton*.dylib $(WORKINGDIR)/
+	echo '[Amethyst v$(VERSION)] dep_krypton - end'
 
 assets:
 	echo '[Amethyst v$(VERSION)] assets - start'
@@ -444,4 +463,4 @@ clean:
 
 		
 
-.PHONY: all clean check native java jre package dsym deploy help
+.PHONY: all clean check native dep_mg dep_krypton java jre package dsym deploy help
