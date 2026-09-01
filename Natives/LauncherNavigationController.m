@@ -447,12 +447,37 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         handler();
         return;
     } else if (@available(iOS 17.4, *)) {
-        NSString *scriptDataString = @"";
+        NSURLComponents *components = [[NSURLComponents alloc] init];
+        components.scheme = @"stikdebug";
+        components.host = @"enable-jit";
+
+        NSMutableArray<NSURLQueryItem *> *queryItems = [NSMutableArray arrayWithObjects:
+            [NSURLQueryItem queryItemWithName:@"bundle-id" value:NSBundle.mainBundle.bundleIdentifier],
+            [NSURLQueryItem queryItemWithName:@"pid" value:[NSString stringWithFormat:@"%d", getpid()]],
+            nil];
+
         if (DeviceNeedsDebugJITMapping()) {
             NSData *scriptData = [NSData dataWithContentsOfFile:[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"UniversalJIT26.js"]];
-            scriptDataString = [@"&script-data=" stringByAppendingString:[scriptData base64EncodedStringWithOptions:0]];
+            if (scriptData == nil) {
+                showDialog(localize(@"Error", nil), @"Amethyst could not load its iOS 26/27 JIT script.");
+                return;
+            }
+            [queryItems addObject:[NSURLQueryItem queryItemWithName:@"script-data"
+                value:[scriptData base64EncodedStringWithOptions:0]]];
         }
-        [UIApplication.sharedApplication openURL:[NSURL URLWithString:[NSString stringWithFormat:@"stikjit://enable-jit?bundle-id=%@&pid=%d%@", NSBundle.mainBundle.bundleIdentifier, getpid(), scriptDataString]] options:@{} completionHandler:nil];
+        components.queryItems = queryItems;
+
+        NSURL *jitURL = components.URL;
+        if (jitURL == nil || ![UIApplication.sharedApplication canOpenURL:jitURL]) {
+            showDialog(localize(@"Error", nil), @"The current version of StikDebug is not installed or cannot accept JIT requests.");
+            return;
+        }
+
+        [UIApplication.sharedApplication openURL:jitURL options:@{} completionHandler:^(BOOL success) {
+            if (!success) {
+                showDialog(localize(@"Error", nil), @"iPadOS refused to open the StikDebug JIT request.");
+            }
+        }];
     } else {
         // Assuming 16.7-17.3.1. SideStore still lacks this URL scheme at the time of writing, so it only jumps to SideStore.
         [UIApplication.sharedApplication openURL:[NSURL URLWithString:[NSString stringWithFormat:@"sidestore://sidejit-enable?pid=%d", getpid()]] options:@{} completionHandler:nil];
