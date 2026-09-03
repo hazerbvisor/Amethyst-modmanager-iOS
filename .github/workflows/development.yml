@@ -64,29 +64,6 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-version
           echo "SDKPATH=$SDKPATH"
 
-      - name: Build Haze Phase 4 JNI bridge
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p Natives/build
-          JDK_BASE_PATH="${{ steps.setup-java.outputs.path }}"
-
-          xcrun --sdk iphoneos clang \
-            -target arm64-apple-ios16.0 \
-            -isysroot "$SDKPATH" \
-            -dynamiclib \
-            -fobjc-arc \
-            -I"$JDK_BASE_PATH/include" \
-            -I"$JDK_BASE_PATH/include/darwin" \
-            -Wl,-install_name,@rpath/libhazejnibridge.dylib \
-            Natives/HazeMetalBridge/HazeJNIBridge.m \
-            -o Natives/build/libhazejnibridge.dylib
-
-          file Natives/build/libhazejnibridge.dylib
-          nm -gj Natives/build/libhazejnibridge.dylib \
-            | grep -q '_Java_dev_haze_metal_NativeBridge_nativeSubmitVertices'
-          echo '[HazeMetal CI] JNI bridge arm64 dylib and submit symbol verified'
-
       # Trigger gmake compilation pipelines with inline stderr filtering and execute post-build binary optimization
       - name: Build sideload IPA & TrollStore tIPA
         shell: bash
@@ -116,9 +93,10 @@ jobs:
 
           HAZE_BUNDLED="artifacts/Payload/AngelAuraAmethyst.app/Frameworks/libhazejnibridge.dylib"
           test -f "$HAZE_BUNDLED"
+          file "$HAZE_BUNDLED"
           nm -gj "$HAZE_BUNDLED" \
             | grep -q '_Java_dev_haze_metal_NativeBridge_nativeSubmitVertices'
-          echo '[HazeMetal CI] JNI bridge verified inside Amethyst Frameworks bundle'
+          echo '[HazeMetal CI] CMake-built JNI bridge verified inside Amethyst Frameworks bundle'
 
       - name: List artifacts
         if: always()
