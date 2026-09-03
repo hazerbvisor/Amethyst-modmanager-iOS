@@ -143,6 +143,21 @@ add_library(AmethystAccountJNI SHARED
 )
 target_link_libraries(AmethystAccountJNI)
 
+# Haze Phase 4 JNI vertex bridge. This is built alongside Amethyst so the
+# normal payload/signing path places a signed libhazejnibridge.dylib in
+# AngelAuraAmethyst.app/Frameworks, which is already on java.library.path.
+add_library(hazejnibridge SHARED
+  HazeMetalBridge/HazeJNIBridge.m
+)
+target_include_directories(hazejnibridge PRIVATE
+  "${CMAKE_CURRENT_LIST_DIR}"
+  "${CMAKE_CURRENT_LIST_DIR}/HazeMetalBridge"
+)
+set_target_properties(hazejnibridge PROPERTIES
+  OUTPUT_NAME "hazejnibridge"
+  INSTALL_NAME_DIR "@rpath"
+)
+
 # Audio capture JNI bridge
 add_library(audio_capture SHARED
   audio_capture_bridge.m
